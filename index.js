@@ -35,9 +35,10 @@ function readPolicy() {
 }
 
 /**
- * First run adopts whatever policy the mounted engines already use, so
- * installing the plugin never changes the effective tier by itself.
- * Returns `null` while no preset engine is mounted yet; the reconciler retries.
+ * First run adopts whatever policy the mounted engines already use when it
+ * matches a tier, so a matching install does not change the effective tier.
+ * A policy outside the five tiers falls back to `standard`. Returns `null`
+ * while no preset engine is mounted yet; the reconciler retries.
  */
 function ensuredState(ctx) {
   const state = readSettings(homeDir())
