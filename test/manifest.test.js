@@ -1,0 +1,72 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+const read = (path) => readFileSync(join(root, path), 'utf8')
+const manifest = JSON.parse(read('package.json'))
+
+test('the bundle manifest declares the patch, client and locale exports', () => {
+  assert.equal(manifest.name, 'homerdsh-compression-tiers')
+  assert.equal(manifest.type, 'module')
+  assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
+  assert.equal(manifest.dsh.client.platform, 'web')
+  assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-settings'))
+  assert.equal(manifest.exports['.'], './index.js')
+  assert.equal(manifest.exports['./client'], './client.js')
+  for (const entry of ['index.js', 'client.js', 'src', 'cordis.patch.yml', 'locale/*.json', 'docs', 'icon.svg']) {
+    assert.ok(manifest.files.includes(entry), `files is missing ${entry}`)
+  }
+})
+
+test('the patch inserts this bundle by its package name', () => {
+  const patch = read('cordis.patch.yml')
+  assert.match(patch, /- insert:/)
+  assert.match(patch, new RegExp(`id: ${manifest.name}`))
+  assert.match(patch, new RegExp(`name: ${manifest.name}`))
+})
+
+test('both locales carry display metadata and a real detail document', () => {
+  for (const [locale, detail] of [['en', 'docs/DETAIL.md'], ['zh', 'docs/DETAIL.zh.md']]) {
+    const data = JSON.parse(read(`locale/${locale}.json`))
+    assert.ok(data.meta.title.length > 0)
+    assert.ok(data.meta.description.length > 40)
+    assert.equal(data.meta.detail, detail)
+    assert.ok(existsSync(join(root, detail)), `${detail} is missing`)
+    const lines = read(detail).split(/\r?\n/).filter((line) => line.trim().length > 0)
+    assert.equal(lines.length, 1, `${detail} must be exactly one image line`)
+    const match = lines[0].match(/^!\[[^\]]*\]\(([^)]+)\)$/)
+    assert.ok(match, `${detail} is not a single markdown image`)
+    assert.ok(existsSync(join(root, dirname(detail), match[1])), `${match[1]} is missing`)
+  }
+})
+
+test('the icon is a small valid SVG inside the package', () => {
+  const path = join(root, 'icon.svg')
+  assert.ok(existsSync(path))
+  assert.ok(statSync(path).size < 256 * 1024)
+  assert.match(read('icon.svg').trim(), /^<svg[\s>]/)
+})
+
+test('the client module registers under the package name', () => {
+  const client = read('client.js')
+  assert.match(client, /window\.__ModuleLoader__\.load\(/)
+  assert.match(client, new RegExp(`id: '${manifest.name}'`))
+  assert.match(client, /settings\.section/)
+  assert.match(client, /ctx\.locale\.register/)
+})
+
+test('every JavaScript file parses', () => {
+  const files = ['index.js', 'client.js']
+  for (const dir of ['src', 'test']) {
+    for (const name of readdirSync(join(root, dir))) {
+      if (name.endsWith('.js')) files.push(join(dir, name))
+    }
+  }
+  for (const file of files) {
+    execFileSync(process.execPath, ['--check', join(root, file)], { stdio: 'pipe' })
+  }
+})

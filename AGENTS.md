@@ -1,0 +1,53 @@
+# AGENTS.md
+
+> 本仓库是 DeepSeek Harness 插件 `homerdsh-compression-tiers` 的维护契约。任何工程代码、资产或系统变更操作前先读本文件。
+
+## 目录
+
+- [范围](#范围)
+- [事实来源](#事实来源)
+- [工程约束](#工程约束)
+- [验证要求](#验证要求)
+- [文档索引](#文档索引)
+- [变更记录](#变更记录)
+
+## 范围
+
+- 本仓库只负责五档上下文压缩：档位参数、设置页、`compression_tiers` / `compression_context` / `compression_compact` 三个工具、以及把档位同步进预设隔离域的 `compaction-basic` 引擎。
+- 不负责：`dsh-compaction-basic` 本身的压缩算法、会话历史、摘要模型选择、官方 `/compact` 命令。
+- 不维护 `homerdsh-workbench` 的其它子系统（会话、GitHub、记忆、视频、投研终端）。
+
+## 事实来源
+
+- 当前策略：`<DSH home>/compression-tiers/settings.json`。引擎配置是派生态，可重建。
+- 档位参数唯一来源：`src/levels.js` 的 `COMPRESSION`；文档与界面不得写出与之不一致的比例。
+- 官方阈值公式：`floor(min(W × thresholdRatio, W − O − 65,536))`，逐字保留 `(W − O) × retainRatio`。
+
+## 工程约束
+
+1. 不手工改已安装 profile 的 `package.json` / `cordis.patch.yml`；安装与启用通过 `plugin_manager`。
+2. 新增运行时文件必须同时更新 `package.json` 的 `files` 与 `exports`；locale、图标、详情文档保持在包内。
+3. 不引入 Harness Client 包作为模块；设置页只用主题 token 与自有控件。
+4. 状态写入必须原子（临时文件 + rename）；手改坏的 JSON 回落到默认值，不得让插件崩溃。
+5. 预设结构访问保持防御式：拿不到结构时放弃更新，保留官方默认。
+6. 插件不写 `$DSH_HOME/cordis.patch.yml`，不改宿主平面上的 `compaction-basic` 行。
+7. 文档内容冲突时优先级：AGENTS.md > README.md > locale 文案。
+
+## 验证要求
+
+- 改动后运行 `npm test`；新增档位、路由或同步逻辑必须补 `node:test` 用例。
+- 修改 manifest、locale、图标或 `client.js` 注册方式后，检查 `test/manifest.test.js` 全绿。
+- 安装验证以插件页的 `application` 结果与新会话中的工具/设置为准，不以下载或日志推断成功。
+- 无法在浏览器中确认的视觉效果，交付时明确写"渲染未验证"。
+
+## 文档索引
+
+- [README.md](README.md)：安装、使用、档位表、工具、原理、限制。
+- [docs/DETAIL.md](docs/DETAIL.md)：插件详情页（英文，单图）。
+- [docs/DETAIL.zh.md](docs/DETAIL.zh.md)：插件详情页（中文，单图）。
+- [locale/en.json](locale/en.json)、[locale/zh.json](locale/zh.json)：插件管理器元数据与描述。
+- [test/](test/)：单元测试与 manifest 规范检查。
+
+## 变更记录
+
+- 2026-11-17：从 `homerdsh-workbench` 拆出，独立包、独立状态、独立工具名；首次安装沿用现有引擎档位。

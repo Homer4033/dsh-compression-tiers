@@ -1,0 +1,62 @@
+{
+  "name": "homerdsh-compression-tiers",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Five-tier context compression policy for official DeepSeek Harness: settings page, agent tools, live occupancy meter, and proactive compaction.",
+  "license": "MIT",
+  "author": "Homer",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "context",
+    "compaction"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Homer4033/homerdsh-compression-tiers.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Homer4033/homerdsh-compression-tiers/issues"
+  },
+  "homepage": "https://github.com/Homer4033/homerdsh-compression-tiers#readme",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24.9.0",
+    "dsh": "0.2.2-rc.3"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  }
+}
