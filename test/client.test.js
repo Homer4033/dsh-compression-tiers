@@ -162,7 +162,7 @@ test('the client factory registers a localized settings section', () => {
     assert.ok(keys.includes('summaryMax'))
     assert.ok(keys.includes('rulesTitle'))
     assert.ok(keys.includes('rulesSave'))
-    assert.ok(keys.includes('rulesOfficialNote'))
+    assert.ok(keys.includes('rulesMissing'))
   }
 })
 
