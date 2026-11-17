@@ -25,6 +25,7 @@ window.__ModuleLoader__.load({
         summaryMax: '最省：到窗口 40% 就把旧上下文收成一条摘要。',
         auto: '自动 ',
         retain: '留 ',
+        sep: '：',
         currentLabel: '当前档位',
         proactiveNote: '主动压缩：智能体在需要时调用 compression_compact，本轮结束后执行并自动继续；人类也可以在对话里输入 /compact。',
         applying: '正在切换…',
@@ -55,6 +56,7 @@ window.__ModuleLoader__.load({
         summaryMax: 'The cheapest tier: folds old context into one summary at 40% of the window.',
         auto: 'Auto ',
         retain: 'keep ',
+        sep: ': ',
         currentLabel: 'Current tier',
         proactiveNote: 'Proactive compaction: the agent calls compression_compact when needed; it runs after the turn and continues automatically. You can also type /compact in chat.',
         applying: 'Switching…',
@@ -291,12 +293,8 @@ window.__ModuleLoader__.load({
         ? timeLabel(last.at) + (last.compacted === false ? ' (' + (last.note || last.error || 'skipped') + ')' : '')
         : t('never')
 
-      return h('section', { className: 'ct-page' },
-        h('style', { key: 'style' }, CSS),
-        h('header', { className: 'ct-head' },
-          h('h2', null, t('title')),
-          h('p', { className: 'ct-intro' }, t('intro'))),
-        h('section', { className: 'ct-panel' },
+      const panel = state
+        ? h('section', { className: 'ct-panel' },
           h('div', { className: 'ct-levels', role: 'radiogroup', 'aria-label': t('levelsAria') },
             levels.map(function (level) {
               const id = level.id
@@ -317,16 +315,26 @@ window.__ModuleLoader__.load({
               h('strong', null, labelOf(t, id)),
               h('span', null, t('auto') + percent(level.thresholdRatio) + ' · ' + t('retain') + percent(level.retainRatio)))
             })),
-          h('p', { className: 'ct-summary' }, state ? t('currentLabel') + '：' + labelOf(t, current) + (currentSummary ? ' — ' + currentSummary : '') : t('loading')),
+          h('p', { className: 'ct-summary' }, t('currentLabel') + t('sep') + labelOf(t, current) + (currentSummary ? ' — ' + currentSummary : '')),
           h('p', { className: 'ct-note' }, t('proactiveNote')),
-          h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, message)),
-        h('div', { className: 'ct-meta' },
-          h('span', null, t('engines') + '：' + engineCount),
-          h('span', null, t('lastCompact') + '：' + lastText),
-          state && state.paths && state.paths.settings
-            ? h('span', null, t('settingsPath') + '：' + state.paths.settings)
-            : null,
-          h('span', null, t('smallWindow'))))
+          h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, message))
+        : h('p', { className: 'ct-intro', role: 'status' }, message || t('loading'))
+
+      return h('section', { className: 'ct-page' },
+        h('style', { key: 'style' }, CSS),
+        h('header', { className: 'ct-head' },
+          h('h2', null, t('title')),
+          h('p', { className: 'ct-intro' }, t('intro'))),
+        panel,
+        state
+          ? h('div', { className: 'ct-meta' },
+            h('span', null, t('engines') + t('sep') + engineCount),
+            h('span', null, t('lastCompact') + t('sep') + lastText),
+            state.paths && state.paths.settings
+              ? h('span', null, t('settingsPath') + t('sep') + state.paths.settings)
+              : null,
+            h('span', null, t('smallWindow')))
+          : null)
     }
 
     return {
