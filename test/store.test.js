@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readSettings, settingsPaths, writeSettings } from '../src/store.js'
+import { readSettings, settingsPaths, writeJson, writeSettings, writeText } from '../src/store.js'
 
 function tempHome() {
   return mkdtempSync(join(tmpdir(), 'compression-tiers-'))
@@ -61,6 +61,31 @@ test('a corrupt JSON file falls back to defaults without throwing', () => {
     const state = readSettings(home)
     assert.equal(state.exists, false)
     assert.equal(state.settings.level, 'standard')
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('atomic text writes create missing directories and leave no temp file', () => {
+  const home = tempHome()
+  try {
+    const path = join(home, 'nested', 'AGENTS.md')
+    writeText(path, 'first\n')
+    writeText(path, 'second\n')
+    assert.equal(readFileSync(path, 'utf8'), 'second\n')
+    assert.deepEqual(readdirSync(join(home, 'nested')), ['AGENTS.md'])
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('writeJson is a thin atomic text write', () => {
+  const home = tempHome()
+  try {
+    const path = join(home, 'state.json')
+    writeJson(path, { level: 'max' })
+    assert.equal(readFileSync(path, 'utf8'), '{\n  "level": "max"\n}\n')
+    assert.deepEqual(readdirSync(home), ['state.json'])
   } finally {
     rmSync(home, { recursive: true, force: true })
   }

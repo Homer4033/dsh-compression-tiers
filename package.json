@@ -1,9 +1,9 @@
 {
   "name": "dsh-compression-tiers",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": false,
   "type": "module",
-  "description": "Five-tier context compression policy for official DeepSeek Harness: settings page, agent tools, live occupancy meter, and proactive compaction.",
+  "description": "Five-tier context compression policy for official DeepSeek Harness plus a global rules editor: settings page, agent tools, live occupancy meter, proactive compaction, and $DSH_HOME/AGENTS.md.",
   "license": "MIT",
   "author": "Homer",
   "keywords": [
@@ -11,7 +11,8 @@
     "dsh",
     "dsh-plugin",
     "context",
-    "compaction"
+    "compaction",
+    "rules"
   ],
   "repository": {
     "type": "git",

@@ -50,11 +50,11 @@ export function readJson(path, fallback) {
 }
 
 /** Same-directory temp file + rename: a reader never sees a half-written file. */
-export function writeJson(path, value) {
+export function writeText(path, text) {
   mkdirSync(join(path, '..'), { recursive: true })
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
   try {
-    writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`)
+    writeFileSync(tmp, text)
     renameSync(tmp, path)
   } catch (error) {
     try {
@@ -64,6 +64,10 @@ export function writeJson(path, value) {
     }
     throw error
   }
+}
+
+export function writeJson(path, value) {
+  writeText(path, `${JSON.stringify(value, null, 2)}\n`)
 }
 
 export function readSettings(home) {

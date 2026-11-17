@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "上下文压缩分档",
-    "description": "在「设置 → 上下文压缩」里提供五档自动压缩策略（极轻、轻量、标准、积极、最大）。选中档位后立即把 thresholdRatio / retainRatio 写入每个已挂载的 Agent 预设压缩引擎，无需重启；选择保存在 <DSH home>/compression-tiers/settings.json。插件还提供三个智能体工具：compression_tiers 读取或切换档位，并接受可选的按路由 headroom 覆盖；compression_context 返回实时占用、本档阈值与剩余空间；compression_compact 排队一次主动压缩，本轮结束后执行并自动继续。对话尾部的 [context] 行会报告同样的占用信息。每档都保留自动压力压缩，人类仍可使用 /compact。限制：五档按 ≥256k tokens 窗口设计（官方 65,536 输出余量会限制更小的窗口）；插件只更新预设隔离域里的引擎，不改宿主平面上的那一行；如果同时安装其他管理同一批压缩引擎或同名职责的插件，两者会互相覆盖策略；切换档位后引擎立即生效，但设置页可能需要刷新浏览器才能重新读取。",
+    "description": "在「设置 → 上下文压缩」里提供五档自动压缩策略（极轻、轻量、标准、积极、最大）。选中档位后立即把 thresholdRatio / retainRatio 写入每个已挂载的 Agent 预设压缩引擎，无需重启；选择保存在 <DSH home>/compression-tiers/settings.json。插件还提供三个智能体工具：compression_tiers 读取或切换档位，并接受可选的按路由 headroom 覆盖；compression_context 返回实时占用、本档阈值与剩余空间；compression_compact 排队一次主动压缩，本轮结束后执行并自动继续。对话尾部的 [context] 行会报告同样的占用信息。每档都保留自动压力压缩，人类仍可使用 /compact。设置页下半部分还能编辑全局规则：直接读写官方指令文件 <DSH home>/AGENTS.md（官方 dsh-agent-instructions 会在之后的会话里注入它），保存是原子写入，系统提示里另带最新 2000 字符的摘要；智能体没有改写该文件的工具，只有你在设置页保存才会写入。限制：五档按 ≥256k tokens 窗口设计（官方 65,536 输出余量会限制更小的窗口）；插件只更新预设隔离域里的引擎，不改宿主平面上的那一行；如果同时安装其他管理同一批压缩引擎或同名职责的插件，两者会互相覆盖策略；切换档位后引擎立即生效，但设置页可能需要刷新浏览器才能重新读取。",
     "detail": "docs/DETAIL.zh.md"
   }
 }

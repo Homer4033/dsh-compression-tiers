@@ -6,6 +6,7 @@ window.__ModuleLoader__.load({
     const NS = 'compressionTiers'
     const LEVELS = ['gentle', 'light', 'standard', 'aggressive', 'max']
     const API = '/compression-tiers/api/settings'
+    const RULES_API = '/compression-tiers/api/rules'
 
     const DICTIONARIES = {
       zh: {
@@ -38,6 +39,20 @@ window.__ModuleLoader__.load({
         never: '暂无',
         settingsPath: '设置文件',
         smallWindow: '五档按 ≥256k tokens 窗口设计；更小的窗口受官方 65,536 输出余量限制，档位主要只剩保留量不同。',
+        rulesTitle: '全局规则',
+        rulesIntro: '编辑官方指令文件 AGENTS.md：官方加载器会在之后的会话里把它注入系统提示，这里保存后下次会话立即按新规则执行。',
+        rulesLabel: '规则内容（写入 AGENTS.md）',
+        rulesPlaceholder: '例如：回答用中文；改工程前先读 AGENTS.md；不要手改 package-lock.json。',
+        rulesSave: '保存规则',
+        rulesSaving: '正在保存…',
+        rulesSaved: '已保存，之后的会话按新规则执行。',
+        rulesLoadFailed: '读取全局规则失败：',
+        rulesSaveFailed: '保存全局规则失败：',
+        rulesChars: '字符',
+        rulesPathLabel: '规则文件',
+        rulesLoading: '正在读取全局规则…',
+        rulesMissing: '文件还不存在，保存后创建。',
+        rulesOfficialNote: '官方 dsh-agent-instructions 读取同一文件；本会话的系统提示只带最新 2000 字符的摘要。智能体不会自行改写这份契约，只有你在本页保存才会写入。',
       },
       en: {
         sectionLabel: 'Context compression',
@@ -69,6 +84,20 @@ window.__ModuleLoader__.load({
         never: 'none yet',
         settingsPath: 'Settings file',
         smallWindow: 'The tiers are designed for windows of at least 256k tokens. On smaller windows the official 65,536-token reserve caps the trigger, so mostly the retain size differs.',
+        rulesTitle: 'Global rules',
+        rulesIntro: 'Edits the official AGENTS.md instruction file. The official loader injects it into later sessions, so a saved rule applies from the next session without a restart.',
+        rulesLabel: 'Rules (written to AGENTS.md)',
+        rulesPlaceholder: 'For example: answer in Chinese; read AGENTS.md before changing a project; never hand-edit package-lock.json.',
+        rulesSave: 'Save rules',
+        rulesSaving: 'Saving…',
+        rulesSaved: 'Saved. Later sessions follow the new rules.',
+        rulesLoadFailed: 'Could not read the global rules: ',
+        rulesSaveFailed: 'Could not save the global rules: ',
+        rulesChars: 'Characters',
+        rulesPathLabel: 'Rules file',
+        rulesLoading: 'Loading the global rules…',
+        rulesMissing: 'The file does not exist yet; saving creates it.',
+        rulesOfficialNote: 'The official dsh-agent-instructions plugin reads the same file. This session only repeats the newest 2,000-character clip in its system prompt. Agents do not rewrite this contract on their own; only a save on this page writes it.',
       },
     }
 
@@ -180,6 +209,77 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-tertiary);
   word-break: break-all;
 }
+.ct-rules-head {
+  display: grid;
+  gap: 4px;
+}
+.ct-rules-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.ct-field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+.ct-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 148px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  resize: vertical;
+}
+.ct-textarea::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+.ct-textarea:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+.ct-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.ct-save {
+  margin: 0;
+  border: 1px solid var(--dsw-alias-border-selected);
+  border-radius: 10px;
+  padding: 6px 14px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ct-save:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+.ct-save:disabled {
+  border-color: var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+.ct-save:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
 `
 
     function percent(value) {
@@ -202,17 +302,31 @@ window.__ModuleLoader__.load({
       return isNaN(date.getTime()) ? String(value) : date.toLocaleString()
     }
 
+    function readJson(response) {
+      return response.json().catch(function () { return null }).then(function (body) {
+        if (!response.ok) {
+          throw new Error(body && body.error ? body.error : 'HTTP ' + response.status)
+        }
+        return body
+      })
+    }
+
     function Page(props) {
       const t = props.t
       const [state, setState] = React.useState(null)
       const [message, setMessage] = React.useState('')
       const [busy, setBusy] = React.useState(false)
+      const [rules, setRules] = React.useState(null)
+      const [rulesText, setRulesText] = React.useState('')
+      const [rulesMessage, setRulesMessage] = React.useState('')
+      const [rulesBusy, setRulesBusy] = React.useState(false)
       const mounted = React.useRef(true)
       const buttons = React.useRef({})
 
       React.useEffect(function () {
         mounted.current = true
         load()
+        loadRules()
         return function () {
           mounted.current = false
         }
@@ -232,13 +346,23 @@ window.__ModuleLoader__.load({
           })
       }
 
-      function readJson(response) {
-        return response.json().catch(function () { return null }).then(function (body) {
-          if (!response.ok) {
-            throw new Error(body && body.error ? body.error : 'HTTP ' + response.status)
-          }
-          return body
-        })
+      function applyRules(body) {
+        setRules(body || null)
+        setRulesText(body && typeof body.text === 'string' ? body.text : '')
+      }
+
+      function loadRules() {
+        fetch(RULES_API, { credentials: 'same-origin' })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            applyRules(body)
+            setRulesMessage('')
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setRulesMessage(t('rulesLoadFailed') + (error && error.message ? error.message : String(error)))
+          })
       }
 
       function select(id) {
@@ -263,6 +387,31 @@ window.__ModuleLoader__.load({
           })
           .then(function () {
             if (mounted.current) setBusy(false)
+          })
+      }
+
+      function saveRules() {
+        if (rulesBusy || !rules || rulesText === rules.text) return
+        setRulesBusy(true)
+        setRulesMessage(t('rulesSaving'))
+        fetch(RULES_API, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ rules: rulesText }),
+        })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            applyRules(body)
+            setRulesMessage(t('rulesSaved'))
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setRulesMessage(t('rulesSaveFailed') + (error && error.message ? error.message : String(error)))
+          })
+          .then(function () {
+            if (mounted.current) setRulesBusy(false)
           })
       }
 
@@ -320,12 +469,47 @@ window.__ModuleLoader__.load({
           h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, message))
         : h('p', { className: 'ct-intro', role: 'status' }, message || t('loading'))
 
+      const dirty = rules ? rulesText !== rules.text : false
+      const rulesCount = rules && typeof rules.chars === 'number' ? rules.chars : 0
+      const rulesLimit = rules && typeof rules.maxChars === 'number' ? rules.maxChars : 0
+      const rulesPanel = h('section', { className: 'ct-panel' },
+        h('div', { className: 'ct-rules-head' },
+          h('h3', null, t('rulesTitle')),
+          h('p', { className: 'ct-note' }, t('rulesIntro'))),
+        h('label', { className: 'ct-field' },
+          h('span', null, t('rulesLabel')),
+          h('textarea', {
+            className: 'ct-textarea',
+            rows: 8,
+            spellCheck: false,
+            value: rulesText,
+            placeholder: t('rulesPlaceholder'),
+            disabled: rulesBusy || !rules,
+            onChange: function (event) { setRulesText(event.target.value) },
+          })),
+        h('div', { className: 'ct-row' },
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: rulesBusy || !rules || !dirty,
+            onClick: saveRules,
+          }, rulesBusy ? t('rulesSaving') : t('rulesSave')),
+          h('span', { className: 'ct-note' }, rules
+            ? t('rulesChars') + ' ' + rulesCount + ' / ' + rulesLimit
+            : (rulesMessage ? '' : t('rulesLoading')))),
+        h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, rulesMessage),
+        rules && rules.path
+          ? h('p', { className: 'ct-note' }, t('rulesPathLabel') + t('sep') + rules.path + (rules.exists === false ? ' — ' + t('rulesMissing') : ''))
+          : null,
+        h('p', { className: 'ct-note' }, t('rulesOfficialNote')))
+
       return h('section', { className: 'ct-page' },
         h('style', { key: 'style' }, CSS),
         h('header', { className: 'ct-head' },
           h('h2', null, t('title')),
           h('p', { className: 'ct-intro' }, t('intro'))),
         panel,
+        rulesPanel,
         state
           ? h('div', { className: 'ct-meta' },
             h('span', null, t('engines') + t('sep') + engineCount),

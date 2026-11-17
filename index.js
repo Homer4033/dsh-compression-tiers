@@ -5,6 +5,7 @@ import { presetCompactionEntries, presetEnginePolicies, syncPresetCompaction } f
 import { attachContextMeter, compactionWindowNote, contextReportText, readContextWindow, readMeter } from './src/context-meter.js'
 import { attachCompactQueue, COMPACT_TOOL_NAME, resolveCompaction } from './src/manual-compact.js'
 import { readSettings, writeSettings } from './src/store.js'
+import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/rules.js'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
 import { errorStatus, guard, readBody, sendJson } from './src/http.js'
 
@@ -127,6 +128,7 @@ function promptText(home) {
     'Context compression tiers.',
     `Current tier: ${state.settings.level}. Automatic pressure compaction fires at about ${Math.round(spec.thresholdRatio * 100)}% of the model window, and about ${Math.round(spec.retainRatio * 100)}% of recent history stays verbatim after it. Every tier keeps automatic compaction on. The five tiers are designed for long windows (>= 256k tokens); below that the official 65,536-token headroom caps the trigger and the tiers mostly differ in retain size.`,
     'Proactive compaction is the agent\'s call. The [context] line at the tail reports live occupancy; call compression_context for the same numbers on demand. When the remaining room is short or you still expect to read a lot more, first write the conclusions you must keep to disk, then call compression_compact once and end the turn. It runs after the turn ends and the conversation resumes automatically with the summary. Do not wait for automatic pressure compaction; /compact remains available to the human. compression_tiers reads or changes the tier, and accepts optional per-route overrides as "provider model headroomTokens [retainTokens]" lines.',
+    rulesPromptBlock(home),
   ].join('\n\n')
 }
 
@@ -147,6 +149,19 @@ function statePayload(ctx) {
     lastCompact: state.settings.lastCompact,
     paths: { settings: state.paths.settings },
     ...engineSummary(ctx),
+  }
+}
+
+function rulesPayload(rules) {
+  return {
+    ok: true,
+    path: rules.path,
+    exists: rules.exists,
+    text: rules.text,
+    chars: rules.chars,
+    lines: rules.lines,
+    updatedAt: rules.updatedAt,
+    maxChars: MAX_RULES_CHARS,
   }
 }
 
@@ -305,6 +320,36 @@ export function apply(ctx) {
               ...statePayload(ctx),
               updatedEngines: applied.result.updated,
             })
+            return
+          }
+          sendJson(res, 405, { error: 'GET or POST' })
+        } catch (error) {
+          sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }))
+  })
+
+  // Global rules: the same `$DSH_HOME/AGENTS.md` the official instruction
+  // loader reads, so a save applies to later sessions without a restart.
+  ctx.inject(['webServer', 'connection'], (child) => {
+    child.effect(() => child.webServer.register({
+      kind: 'exact',
+      path: '/compression-tiers/api/rules',
+      handler: async (req, res) => {
+        if (guard(child, req, res)) return
+        try {
+          if (req.method === 'GET') {
+            sendJson(res, 200, rulesPayload(readRules(homeDir())))
+            return
+          }
+          if (req.method === 'POST') {
+            const body = await readBody(req)
+            if (typeof body.rules !== 'string') {
+              sendJson(res, 400, { error: 'nothing to update: pass rules as a string' })
+              return
+            }
+            sendJson(res, 200, rulesPayload(saveRules(homeDir(), body.rules)))
             return
           }
           sendJson(res, 405, { error: 'GET or POST' })

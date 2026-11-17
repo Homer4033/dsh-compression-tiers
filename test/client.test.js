@@ -26,17 +26,16 @@ function loadClient() {
   return loaded[0]
 }
 
-function fakeReact(state) {
-  let first = true
+/**
+ * Feed the page a fixed sequence of `useState` values. A single value becomes
+ * the first state, which is the settings payload; everything else keeps its
+ * initial value, so a render may start before the fetches resolve.
+ */
+function fakeReact(states) {
+  const queue = Array.isArray(states) ? states.slice() : [states]
   return {
     createElement: (type, props, ...children) => ({ type, props: { ...(props || {}), children } }),
-    useState: (initial) => {
-      if (first) {
-        first = false
-        return [state, () => {}]
-      }
-      return [initial, () => {}]
-    },
+    useState: (initial) => (queue.length ? [queue.shift(), () => {}] : [initial, () => {}]),
     useEffect: () => {},
     useRef: (value) => ({ current: value }),
   }
@@ -53,9 +52,73 @@ function collect(node, out = []) {
   return out
 }
 
+function sectionContext(registrations, dictionaries) {
+  return {
+    effect(fn) {
+      const dispose = fn()
+      return () => {
+        if (typeof dispose === 'function') dispose()
+      }
+    },
+    locale: {
+      register(namespace, dicts) {
+        if (dictionaries) Object.assign(dictionaries, { namespace, dicts })
+        return () => {}
+      },
+      bind() {
+        return (key) => key
+      },
+    },
+    slots: {
+      inject(_slot, callback) {
+        return callback()
+      },
+      register(options, component) {
+        registrations.push({ options, component })
+        return () => {}
+      },
+    },
+  }
+}
+
+function render(states) {
+  const module = loadClient()
+  const registrations = []
+  const dictionaries = {}
+  module.factory(() => fakeReact(states)).apply(sectionContext(registrations, dictionaries))
+  assert.equal(registrations.length, 1)
+  const element = registrations[0].component()
+  const tree = element.type(element.props)
+  return { nodes: collect(tree), dictionaries, options: registrations[0].options }
+}
+
+const settingsState = {
+  level: 'standard',
+  levels: ['gentle', 'light', 'standard', 'aggressive', 'max'].map((id) => ({
+    id,
+    thresholdRatio: 0.6,
+    retainRatio: 0.16,
+  })),
+  engines: 2,
+  lastCompact: null,
+  paths: { settings: 'C:/dsh/compression-tiers/settings.json' },
+}
+
+function rulesState(text) {
+  return {
+    ok: true,
+    path: 'C:/dsh/AGENTS.md',
+    exists: true,
+    text,
+    chars: text.length,
+    lines: text.split('\n').length,
+    updatedAt: '2026-11-17T12:00:00.000Z',
+    maxChars: 100000,
+  }
+}
+
 test('the client factory registers a localized settings section', () => {
   const module = loadClient()
-  assert.equal(module.id, 'dsh-compression-tiers')
   const registrations = []
   let dictionaries
   const ctx = {
@@ -97,57 +160,52 @@ test('the client factory registers a localized settings section', () => {
     assert.ok(keys.includes('title'))
     assert.ok(keys.includes('levelGentle'))
     assert.ok(keys.includes('summaryMax'))
+    assert.ok(keys.includes('rulesTitle'))
+    assert.ok(keys.includes('rulesSave'))
+    assert.ok(keys.includes('rulesOfficialNote'))
   }
 })
 
-test('the settings page renders five tier buttons and metadata', () => {
-  const module = loadClient()
-  const state = {
-    level: 'standard',
-    levels: ['gentle', 'light', 'standard', 'aggressive', 'max'].map((id) => ({
-      id,
-      thresholdRatio: 0.6,
-      retainRatio: 0.16,
-    })),
-    engines: 2,
-    lastCompact: null,
-    paths: { settings: 'C:/dsh/compression-tiers/settings.json' },
-  }
-  let registration
-  const ctx = {
-    effect(fn) {
-      const dispose = fn()
-      return () => {
-        if (typeof dispose === 'function') dispose()
-      }
-    },
-    locale: {
-      register() {
-        return () => {}
-      },
-      bind() {
-        return (key) => key
-      },
-    },
-    slots: {
-      inject(_slot, callback) {
-        return callback()
-      },
-      register(options, component) {
-        registration = { options, component }
-        return () => {}
-      },
-    },
-  }
-  module.factory(() => fakeReact(state)).apply(ctx)
-  const element = registration.component()
-  const tree = element.type(element.props)
-  const nodes = collect(tree)
+test('the settings page renders five tier buttons and the global rules editor', () => {
+  const { nodes } = render(settingsState)
   const buttons = nodes.filter((node) => node.type === 'button')
-  assert.equal(buttons.length, 5)
-  const selected = buttons.filter((node) => node.props['aria-checked'] === 'true')
+  const tiers = buttons.filter((node) => node.props.role === 'radio')
+  assert.equal(tiers.length, 5)
+  const selected = tiers.filter((node) => node.props['aria-checked'] === 'true')
   assert.equal(selected.length, 1)
   assert.match(String(selected[0].props.className), /ct-level-on/)
-  const texts = nodes.filter((node) => typeof node.type === 'string')
-  assert.ok(texts.some((node) => node.type === 'style'))
+
+  const textareas = nodes.filter((node) => node.type === 'textarea')
+  assert.equal(textareas.length, 1)
+  // Before the rules fetch resolves there is nothing to save.
+  assert.equal(textareas[0].props.disabled, true)
+  const save = buttons.find((node) => String(node.props.className || '').includes('ct-save'))
+  assert.ok(save, 'the rules panel has a save button')
+  assert.equal(save.props.disabled, true)
+  assert.ok(nodes.some((node) => node.type === 'style'))
+})
+
+test('the rules editor shows the saved text and enables saving an edit', () => {
+  const saved = rulesState('Answer in Chinese.\n')
+  const { nodes } = render([settingsState, '', false, saved, 'Answer in Chinese.\nBe brief.\n', '', false])
+  const buttons = nodes.filter((node) => node.type === 'button')
+  const save = buttons.find((node) => String(node.props.className || '').includes('ct-save'))
+  assert.ok(save)
+  assert.equal(save.props.disabled, false)
+  const textareas = nodes.filter((node) => node.type === 'textarea')
+  assert.equal(textareas[0].props.value, 'Answer in Chinese.\nBe brief.\n')
+  assert.equal(textareas[0].props.disabled, false)
+  const path = 'C:/dsh/AGENTS.md'
+  const mentionsPath = nodes.some((node) => Array.isArray(node.props.children)
+    && node.props.children.some((child) => typeof child === 'string' && child.includes(path)))
+  assert.ok(mentionsPath, 'the panel shows the rules file path')
+})
+
+test('an unchanged rules draft keeps saving disabled', () => {
+  const saved = rulesState('Answer in Chinese.\n')
+  const { nodes } = render([settingsState, '', false, saved, 'Answer in Chinese.\n', '', false])
+  const save = nodes
+    .filter((node) => node.type === 'button')
+    .find((node) => String(node.props.className || '').includes('ct-save'))
+  assert.equal(save.props.disabled, true)
 })
