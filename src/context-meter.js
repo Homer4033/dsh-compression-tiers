@@ -112,12 +112,12 @@ export function formatMeterLine(meter) {
 }
 
 /** Human/model readable detail for the compression_context tool. */
-export function contextReportText(meter, spec) {
-  const level = spec && spec.label ? `${spec.label} (${spec.thresholdRatio})` : 'current tier'
+export function contextReportText(meter, spec, level) {
+  const tier = level ? `${level} (threshold ${spec.thresholdRatio}, retain ${spec.retainRatio})` : `current tier (threshold ${spec.thresholdRatio})`
   const note = compactionWindowNote(meter.windowTokens)
   return [
     formatMeterLine(meter),
-    `Automatic threshold ${formatTokenCount(meter.thresholdTokens)} tokens (${level}); about ${formatTokenCount(meter.retainTokens)} tokens of recent history stay verbatim after compaction.`,
+    `Automatic threshold ${formatTokenCount(meter.thresholdTokens)} tokens at ${tier}; about ${formatTokenCount(meter.retainTokens)} tokens of recent history stay verbatim after compaction.`,
     `Current occupancy is ${(meter.thresholdPercent * 100).toFixed(1)}% of that threshold. To compact proactively call compression_compact; it runs after this turn and continues automatically.`,
     ...(note ? [note] : []),
   ].join('\n')

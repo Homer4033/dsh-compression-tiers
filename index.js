@@ -124,7 +124,7 @@ function promptText(home) {
   const spec = compressionSpec(state.settings.level)
   return [
     'Context compression tiers.',
-    `Current tier: ${state.settings.level} (${spec.label}). Automatic pressure compaction fires at about ${Math.round(spec.thresholdRatio * 100)}% of the model window, and about ${Math.round(spec.retainRatio * 100)}% of recent history stays verbatim after it. Every tier keeps automatic compaction on. The five tiers are designed for long windows (>= 256k tokens); below that the official 65,536-token headroom caps the trigger and the tiers mostly differ in retain size.`,
+    `Current tier: ${state.settings.level}. Automatic pressure compaction fires at about ${Math.round(spec.thresholdRatio * 100)}% of the model window, and about ${Math.round(spec.retainRatio * 100)}% of recent history stays verbatim after it. Every tier keeps automatic compaction on. The five tiers are designed for long windows (>= 256k tokens); below that the official 65,536-token headroom caps the trigger and the tiers mostly differ in retain size.`,
     'Proactive compaction is the agent\'s call. The [context] line at the tail reports live occupancy; call compression_context for the same numbers on demand. When the remaining room is short or you still expect to read a lot more, first write the conclusions you must keep to disk, then call compression_compact once and end the turn. It runs after the turn ends and the conversation resumes automatically with the summary. Do not wait for automatic pressure compaction; /compact remains available to the human. compression_tiers reads or changes the tier, and accepts optional per-route overrides as "provider model headroomTokens [retainTokens]" lines.',
   ].join('\n\n')
 }
@@ -201,10 +201,11 @@ export function apply(ctx) {
         }
       }
       const windowNote = compactionWindowNote(meter.windowTokens)
+      const level = readSettings(homeDir()).settings.level
       return {
         ok: true,
-        level: readSettings(homeDir()).settings.level,
-        text: contextReportText(meter, spec),
+        level,
+        text: contextReportText(meter, spec, level),
         windowNote,
         windowTokens: meter.windowTokens,
         usedTokens: meter.usedTokens,
