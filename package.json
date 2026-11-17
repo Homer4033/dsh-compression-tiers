@@ -1,5 +1,5 @@
 {
-  "name": "homerdsh-compression-tiers",
+  "name": "dsh-compression-tiers",
   "version": "1.0.0",
   "private": false,
   "type": "module",
@@ -15,12 +15,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Homer4033/homerdsh-compression-tiers.git"
+    "url": "git+https://github.com/Homer4033/dsh-compression-tiers.git"
   },
   "bugs": {
-    "url": "https://github.com/Homer4033/homerdsh-compression-tiers/issues"
+    "url": "https://github.com/Homer4033/dsh-compression-tiers/issues"
   },
-  "homepage": "https://github.com/Homer4033/homerdsh-compression-tiers#readme",
+  "homepage": "https://github.com/Homer4033/dsh-compression-tiers#readme",
   "main": "./index.js",
   "exports": {
     ".": "./index.js",

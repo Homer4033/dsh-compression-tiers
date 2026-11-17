@@ -3,6 +3,8 @@
 > 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的五档上下文压缩策略：设置页 + 智能体工具 + 实时占用提示 + 主动压缩。
 >
 > A five-tier context-compression policy for DeepSeek Harness: a settings page, three agent tools, a live occupancy line, and proactive compaction.
+>
+> 包名与仓库：`dsh-compression-tiers`（社区 `dsh-` 前缀；加载器行 id 为 `compression-tiers`）。
 
 ## 目录
 

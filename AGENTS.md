@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> 本仓库是 DeepSeek Harness 插件 `homerdsh-compression-tiers` 的维护契约。任何工程代码、资产或系统变更操作前先读本文件。
+> 本仓库是 DeepSeek Harness 插件 `dsh-compression-tiers` 的维护契约。任何工程代码、资产或系统变更操作前先读本文件。
 
 ## 目录
 

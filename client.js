@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: 'homerdsh-compression-tiers',
+  id: 'dsh-compression-tiers',
   factory(require) {
     const React = require('react')
     const h = React.createElement

@@ -55,7 +55,7 @@ function collect(node, out = []) {
 
 test('the client factory registers a localized settings section', () => {
   const module = loadClient()
-  assert.equal(module.id, 'homerdsh-compression-tiers')
+  assert.equal(module.id, 'dsh-compression-tiers')
   const registrations = []
   let dictionaries
   const ctx = {

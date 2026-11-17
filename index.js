@@ -8,7 +8,7 @@ import { readSettings, writeSettings } from './src/store.js'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
 import { errorStatus, guard, readBody, sendJson } from './src/http.js'
 
-export const name = 'homerdsh-compression-tiers'
+export const name = 'compression-tiers'
 export const inject = ['tools', 'systemPrompt']
 
 function safeGet(ctx, key) {
