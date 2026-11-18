@@ -12,6 +12,7 @@
 - [安装](#安装)
 - [使用](#使用)
 - [全局规则](#全局规则)
+- [GitHub CLI](#github-cli)
 - [五档参数](#五档参数)
 - [智能体工具](#智能体工具)
 - [工作原理](#工作原理)
@@ -22,14 +23,15 @@
 
 ## 这是什么
 
-官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐四件事：
+官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐五件事：
 
 1. **设置页**：`设置 → 上下文压缩`，五个按钮直接切档，显示自动触发比例与逐字保留比例。
 2. **引擎同步**：选中的档位立即写入每个已挂载的 Agent 预设压缩引擎（官方组合里真正运行的引擎在预设隔离域，家庭补丁碰不到）。
 3. **智能体闭环**：`compression_context` 读实时占用，`compression_compact` 在需要时主动压缩并在本轮结束后自动续跑；对话尾部的 `[context]` 行给出同样的数字。
 4. **全局规则**：同一页下半部分直接编辑官方指令文件 `<DSH home>/AGENTS.md`，保存即原子写入，不另存副本。
+5. **GitHub CLI**：同一页管理 `gh`——识别系统 PATH、下载固定版本的托管副本、走设备码登录，供官方变更请求面板使用。
 
-本包从 `homerdsh-workbench` 的压缩子系统拆出，状态独立、工具名独立，可单独安装；全局规则面板也由工作台合并而来，读写的是同一个官方文件。
+本包从 `homerdsh-workbench` 的压缩子系统拆出，状态独立、工具名独立，可单独安装；全局规则与 GitHub CLI 面板也由工作台合并而来。
 
 ## 安装
 
@@ -71,6 +73,18 @@
 - **生效**：官方加载器在之后的会话里注入这份文件，不需要重启 DSH；本会话的系统提示额外带最新 2,000 字符的摘要，让刚保存的规则立刻出现在上下文里。
 - **边界**：智能体没有改写这个文件的工具，只有你在设置页保存才会写入；`homerdsh-workbench` 里的同名面板写的是同一个文件，不会出现两份互相打架的规则。
 - **路由**：`GET/POST /compression-tiers/api/rules`，与压缩设置路由一样用 `connection.requestRejection` 做同源与浏览器认证，拿不到校验服务时 fail closed。
+
+## GitHub CLI
+
+官方「变更请求与工作树」bundle（`@deepseek-ai/dsh-experimental-forge-bundle`）靠本机 `gh` 读 PR、检查与评审。设置页的「GitHub CLI」面板负责三件事：
+
+- **检测**：先看托管版 `<DSH home>/compression-tiers/gh/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把它插到宿主进程 PATH 最前面，官方面板随即可用。
+- **下载**：内置固定版本 `gh 2.76.2`（Windows / Linux，x64 / arm64），从 `cli/cli` 官方 release 下载；支持 HTTP Range 断点续传、10 分钟超时、解压后先跑 `gh --version` 探测暂存副本，再原子替换，失败自动回滚旧二进制。
+- **登录**：调 `gh auth login --web` 走设备码流程：页面显示一次性验证码（可复制）、打开授权页、取消；`gh` 子进程在后台轮询，完成后自动刷新成「已登录：账号」。凭据存在 gh 自己的存储里，不写 DSH 数据目录。
+
+接口：`GET/POST /compression-tiers/api/github`（状态，动作 `download` / `login` / `cancel`）与 `GET /compression-tiers/api/github/auth`（`gh auth status` + `gh --version`），都走同一套同源校验。
+
+> 下载只校验大小与 `gh --version`，没有对压缩包固定 SHA-256；钉住的是官方 release URL。
 
 ## 五档参数
 
@@ -115,6 +129,7 @@
 - 对预设结构的访问是防御式的：DSH 升级改了私有结构时，插件放弃更新并保留官方默认，而不是让预设激活失败。
 - 设置路由走官方 `webServer`，并用 `connection.requestRejection` 做同源与浏览器认证；拿不到校验服务时 fail closed。
 - 全局规则没有第二份状态：`<DSH home>/AGENTS.md` 本身就是唯一事实来源，插件只负责原子写入和提示摘要；文件删掉等于没有规则。
+- GitHub CLI 的托管副本与下载暂存放在插件目录 `<DSH home>/compression-tiers/gh`，与工作台的 `homerdsh/components` 互不干扰；PATH 前插只影响本进程，不改系统环境变量。
 - 状态文件与引擎都是可重建的：删掉设置文件后，下次激活会重新沿用当前引擎策略。
 
 ## 兼容性与限制
@@ -125,6 +140,9 @@
 - **重复的占用行**：同上，两个插件都会注入末尾占用行与各自工具；只用其中一个。
 - **全局规则没有智能体工具**：档位可以用 `compression_tiers` 改，规则只能由人在设置页保存，避免智能体自行改写高优先级契约。写入的内容会被官方加载器注入后续每个会话，只保存你自己信任的规则，不要写密钥或一次性笔记。
 - **规则大小**：单次保存上限 100,000 字符，超出直接 413；系统提示里的摘要固定 2,000 字符，超出部分仍由官方加载器在会话开始时读取。
+- **GitHub CLI 需要网络**：托管版从 github.com 下载，企业代理或内网可能失败；失败会保留 `.part` 文件，重试时续传。下载只校验大小和 `gh --version`，不固定压缩包 SHA-256。
+- **系统已有 gh**：面板显示「系统已安装（PATH）」，可以直接登录；点「仍要下载」会安装托管版并优先使用。
+- **登录凭据位置**：`gh auth login` 把凭据写进 gh 自己的存储（Windows 上是 `%APPDATA%\GitHub CLI`），不写 DSH 数据目录，也不会进转移包。
 - **浏览器刷新**：切换档位对引擎立即生效；设置页自身的状态通过接口刷新，个别情况下需要刷新页面重新读取。
 - **中文/英文**：设置页与插件详情按 DSH 语言环境显示；智能体面向的提示与工具描述为英文。
 
@@ -138,7 +156,7 @@
 ## 开发
 
 ```bash
-npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、manifest 规范
+npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、manifest 规范
 node --check index.js
 ```
 
@@ -153,6 +171,7 @@ src/context-meter.js  实时占用计算、[context] 尾行、compression_contex
 src/manual-compact.js 主动压缩队列（compactNow + follow-up）
 src/store.js          状态文件读写（JSON 与原子文本写入）
 src/rules.js          全局规则文件：路径、读取、校验、原子写入、提示摘要
+src/gh.js             GitHub CLI：托管下载（断点续传/回滚）、PATH 检测、设备码登录
 src/routes.js         按路由覆盖解析
 src/http.js           设置路由的同源/认证与 JSON 辅助
 test/                 node:test 单元测试与 manifest 检查

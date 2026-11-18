@@ -6,6 +6,7 @@ import { attachContextMeter, compactionWindowNote, contextReportText, readContex
 import { attachCompactQueue, COMPACT_TOOL_NAME, resolveCompaction } from './src/manual-compact.js'
 import { readSettings, writeSettings } from './src/store.js'
 import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/rules.js'
+import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, prependGhPath, startGhDownload } from './src/gh.js'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
 import { errorStatus, guard, readBody, sendJson } from './src/http.js'
 
@@ -173,6 +174,13 @@ export function apply(ctx) {
     readPolicy,
     trace,
   })
+  // The official change-request bundle shells out to `gh`; a managed copy goes
+  // first on PATH so the bundle finds the version this page installed.
+  try {
+    prependGhPath(homeDir())
+  } catch (error) {
+    trace('gh:path-failed', error instanceof Error ? error.message : String(error))
+  }
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'compression-tiers',
@@ -358,6 +366,55 @@ export function apply(ctx) {
         }
       },
     }))
+  })
+
+  // GitHub CLI: managed download, PATH detection and the gh device-code login.
+  ctx.inject(['webServer', 'connection'], (child) => {
+    const register = (path, handler, label) => child.effect(() => child.webServer.register({ kind: 'exact', path, handler }), `compression-tiers: ${label}`)
+
+    register('/compression-tiers/api/github', async (req, res) => {
+      if (guard(child, req, res)) return
+      try {
+        if (req.method === 'GET') {
+          sendJson(res, 200, { ok: true, gh: ghStatus(homeDir()), login: githubLoginStatus() })
+          return
+        }
+        if (req.method === 'POST') {
+          const body = await readBody(req)
+          const action = typeof body.action === 'string' ? body.action : ''
+          if (action === 'download') {
+            sendJson(res, 202, { ok: true, gh: startGhDownload(homeDir()) })
+            return
+          }
+          if (action === 'login') {
+            sendJson(res, 200, { ok: true, ...beginGithubLogin(homeDir()) })
+            return
+          }
+          if (action === 'cancel') {
+            sendJson(res, 200, { ok: true, ...cancelGithubLogin() })
+            return
+          }
+          sendJson(res, 400, { error: 'action must be download, login, or cancel' })
+          return
+        }
+        sendJson(res, 405, { error: 'GET or POST' })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'github route')
+
+    register('/compression-tiers/api/github/auth', async (req, res) => {
+      if (guard(child, req, res)) return
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'GET' })
+        return
+      }
+      try {
+        sendJson(res, 200, { ok: true, auth: await ghAuthStatus(homeDir()) })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'github auth route')
   })
 
   // Presets mount after this plugin in the official composition and live in

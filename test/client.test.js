@@ -163,6 +163,9 @@ test('the client factory registers a localized settings section', () => {
     assert.ok(keys.includes('rulesTitle'))
     assert.ok(keys.includes('rulesSave'))
     assert.ok(keys.includes('rulesMissing'))
+    assert.ok(keys.includes('ghTitle'))
+    assert.ok(keys.includes('ghDownload'))
+    assert.ok(keys.includes('ghLogin'))
   }
 })
 
@@ -208,4 +211,47 @@ test('an unchanged rules draft keeps saving disabled', () => {
     .filter((node) => node.type === 'button')
     .find((node) => String(node.props.className || '').includes('ct-save'))
   assert.equal(save.props.disabled, true)
+})
+
+test('the GitHub CLI panel shows the installed binary and the signed-in account', () => {
+  const github = {
+    gh: {
+      id: 'gh',
+      name: 'GitHub CLI',
+      version: '2.76.2',
+      supported: true,
+      state: 'installed',
+      installed: true,
+      system: false,
+      systemPath: null,
+      binaryPath: 'C:/dsh/compression-tiers/gh/bin/gh.exe',
+      sourceKind: 'managed',
+      received: 0,
+      total: null,
+      percent: null,
+      error: null,
+    },
+    login: { active: false, state: 'idle', code: null, url: null, note: '', error: null, startedAt: null },
+  }
+  const auth = {
+    available: true,
+    authenticated: true,
+    account: 'Homer4033',
+    path: 'C:/dsh/compression-tiers/gh/bin/gh.exe',
+    version: '2.76.2',
+  }
+  const { nodes } = render([settingsState, '', false, null, '', '', false, github, auth, '', false])
+  const texts = nodes
+    .filter((node) => typeof node.type === 'string')
+    .flatMap((node) => (Array.isArray(node.props.children) ? node.props.children : []))
+    .filter((child) => typeof child === 'string')
+  assert.ok(texts.some((text) => text.includes('Homer4033')))
+  assert.ok(texts.some((text) => text.includes('2.76.2')))
+  assert.ok(texts.some((text) => text.includes(github.gh.binaryPath)))
+  // The install button is disabled once a managed binary exists.
+  const install = nodes
+    .filter((node) => node.type === 'button')
+    .find((node) => String(node.props.className || '').includes('ct-save') && String(node.props.children).includes('ghInstalled'))
+  assert.ok(install)
+  assert.equal(install.props.disabled, true)
 })
