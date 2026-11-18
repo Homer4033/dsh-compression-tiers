@@ -117,6 +117,8 @@ window.__ModuleLoader__.load({
         ghPushFailedTimeout: '推送超时，已终止进程',
         ghPushFailedConfig: '推送失败：先设置仓库路径',
         ghPushFailedOther: '推送失败：',
+        ghPushBlockedSecrets: '发现疑似密钥，已阻止推送。',
+        ghPushAnyway: '仍然推送',
         ghRepoLoadFailed: '读取仓库状态失败：',
         ghCreate: '建私有仓',
         ghCreateConfirm: '确认建私有仓并推送',
@@ -228,6 +230,8 @@ window.__ModuleLoader__.load({
         ghPushFailedTimeout: 'Push timed out; the process tree was killed',
         ghPushFailedConfig: 'Push failed: set the repository path first',
         ghPushFailedOther: 'Push failed: ',
+        ghPushBlockedSecrets: 'A likely secret was found; the push was blocked.',
+        ghPushAnyway: 'Push anyway',
         ghRepoLoadFailed: 'Could not read the repository: ',
         ghCreate: 'Create private repo',
         ghCreateConfirm: 'Confirm: create and push',
@@ -510,6 +514,7 @@ window.__ModuleLoader__.load({
       const [repoMessage, setRepoMessage] = React.useState('')
       const [createName, setCreateName] = React.useState('')
       const [createArmed, setCreateArmed] = React.useState(false)
+      const [secretFindings, setSecretFindings] = React.useState([])
       const mounted = React.useRef(true)
       const pathTouched = React.useRef(false)
       const buttons = React.useRef({})
@@ -757,13 +762,19 @@ window.__ModuleLoader__.load({
         return tail ? prefix + t('sep') + tail : prefix
       }
 
-      function pushNow() {
+      function pushNow(force) {
         if (repoBusy) return
         setRepoBusy('push')
         setRepoMessage(t('ghPushing'))
-        githubAction({ action: 'push' })
+        githubAction({ action: 'push', force: force === true })
           .then(function (body) {
             if (!mounted.current) return
+            if (body && body.push && body.push.failure === 'secret-scan') {
+              setSecretFindings(body.push.findings || [])
+              setRepoMessage(t('ghPushBlockedSecrets'))
+              return
+            }
+            setSecretFindings([])
             if (body && body.repo) setRepo(body.repo)
             setRepoMessage(body && body.ok ? t('ghPushed') : pushErrorText(body))
             return loadNetwork()
@@ -1073,6 +1084,20 @@ window.__ModuleLoader__.load({
               disabled: Boolean(repoBusy) || !createName.trim(),
               onClick: createNow,
             }, createArmed ? t('ghCreateConfirm') : t('ghCreate')))
+          : null,
+        secretFindings.length
+          ? h('p', { className: 'ct-status', role: 'alert' }, secretFindings.slice(0, 3).map(function (finding) {
+            return finding.file + (finding.line ? ':' + finding.line : '') + ' (' + finding.kind + ')'
+          }).join(' · ') + (secretFindings.length > 3 ? ' +' + (secretFindings.length - 3) : ''))
+          : null,
+        secretFindings.length
+          ? h('div', { className: 'ct-row' },
+            h('button', {
+              type: 'button',
+              className: 'ct-save',
+              disabled: Boolean(repoBusy),
+              onClick: function () { pushNow(true) },
+            }, t('ghPushAnyway')))
           : null,
         repoMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, repoMessage) : null)
       const ghPanel = h('section', { className: 'ct-panel' },

@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { connect as netConnect } from 'node:net'
 import { promises as dns } from 'node:dns'
-import { isAbsolute, join } from 'node:path'
+import { extname, isAbsolute, join } from 'node:path'
 
 /**
  * GitHub publishing helpers: is the network actually usable, and can a commit
@@ -497,6 +497,97 @@ export async function createRepo({ gh, cwd, name, visibility = 'private', confir
     return { ok: false, error: failure === 'unknown' ? 'create-failed' : failure, detail: output.slice(-800) }
   }
   return { ok: true, name: slug, visibility: visibilityFlag === '--public' ? 'public' : 'private', output: output.slice(-800) }
+}
+
+/**
+ * Shapes worth blocking a push over. The literals are assembled by
+ * concatenation so this module never matches itself; lockfile base64 integrity
+ * hashes are deliberately absent, only almost-certain live credentials are
+ * listed.
+ */
+const SECRET_PATTERNS = [
+  { kind: 'private-key', pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
+  { kind: 'github-token', pattern: new RegExp('\\bgh' + '[pousr]_[A-Za-z0-9]{20,}') },
+  { kind: 'github-pat', pattern: new RegExp('\\bgithub' + '_pat_[A-Za-z0-9_]{20,}') },
+  { kind: 'aws-access-key', pattern: new RegExp('\\bAK' + 'IA[0-9A-Z]{16}\\b') },
+  { kind: 'slack-token', pattern: new RegExp('\\bxox' + '[baprs]-[A-Za-z0-9-]{10,}') },
+  { kind: 'openai-key', pattern: new RegExp('\\bsk' + '-[A-Za-z0-9]{20,}') },
+  { kind: 'generic-assignment', pattern: /(?:secret|token|password|passwd|api[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_\-]{24,}['"]/i },
+]
+
+/** Files that are credentials by name, whatever they contain. */
+const SECRET_PATH = /(^|\/)(\.env|keys\.json|id_rsa|id_ed25519|credentials(\.json)?|[^/]*token[^/]*\.txt)$|\.pem$/i
+
+const BINARY_EXT = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.zip', '.gz', '.tgz',
+  '.pdf', '.woff', '.woff2', '.ttf', '.exe', '.dll', '.node', '.mp4', '.wasm',
+])
+
+/**
+ * Scan the files git would publish. Run before the first push of a repository
+ * that touches credentials: a Tushare/gh token pasted into a config file is
+ * invisible to `.gitignore` once it is tracked, and a private repository is not
+ * a licence to leak it. Callers may pass `force` after a human looked at the
+ * findings.
+ */
+export async function scanSecrets(cwd, {
+  run = runProcess,
+  readFile = (path) => readFileSync(path, 'utf8'),
+  sizeOf = (path) => statSync(path).size,
+  maxBytes = 512 * 1024,
+  maxFindings = 50,
+  timeoutMs = 15_000,
+} = {}) {
+  if (!cwd) return { ok: true, findings: [], scanned: 0, files: 0, error: 'no-repository-configured' }
+  if (!existsSync(cwd)) return { ok: true, findings: [], scanned: 0, files: 0, error: 'repository-path-missing' }
+  const listed = await run('git', ['ls-files', '-z'], { cwd, timeoutMs })
+  if (listed.code !== 0) return { ok: true, findings: [], scanned: 0, files: 0, error: 'not-a-git-repository' }
+  const files = String(listed.stdout || '').split('\0').filter(Boolean)
+  const findings = []
+  let scanned = 0
+  let skipped = 0
+  for (const file of files) {
+    if (findings.length >= maxFindings) break
+    if (SECRET_PATH.test(file)) {
+      findings.push({ file, line: null, kind: 'sensitive-path' })
+      continue
+    }
+    if (BINARY_EXT.has(extname(file).toLowerCase())) {
+      skipped += 1
+      continue
+    }
+    let text
+    try {
+      if (sizeOf(join(cwd, file)) > maxBytes) {
+        skipped += 1
+        continue
+      }
+      text = readFile(join(cwd, file))
+    } catch {
+      skipped += 1
+      continue
+    }
+    if (typeof text !== 'string' || text.includes('\0')) {
+      skipped += 1
+      continue
+    }
+    scanned += 1
+    const lines = text.split(/\r?\n/)
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index]
+      for (const { kind, pattern } of SECRET_PATTERNS) {
+        if (pattern.test(line)) findings.push({ file, line: index + 1, kind })
+      }
+      if (findings.length >= maxFindings) break
+    }
+  }
+  return {
+    ok: findings.length === 0,
+    findings: findings.slice(0, maxFindings),
+    scanned,
+    skipped,
+    files: files.length,
+  }
 }
 
 /** The default repository: a configured path, else this package's checkout. */

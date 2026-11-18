@@ -16,6 +16,7 @@ import {
   repoSnapshot,
   repoView,
   resolveRepoPath,
+  scanSecrets,
 } from './src/publish.js'
 import { dirname, isAbsolute } from 'node:path'
 import { existsSync, statSync } from 'node:fs'
@@ -468,9 +469,21 @@ export function apply(ctx) {
             const settings = githubSettings()
             const cwd = repoPath()
             const detected = await detectProxy({ cwd, override: settings.proxy })
+            // A tracked token is worth a stop before it leaves the machine; a
+            // human can push anyway once they have looked at the findings.
+            const secrets = await scanSecrets(cwd)
+            if (!secrets.ok && body.force !== true) {
+              sendJson(res, 200, {
+                ok: false,
+                push: { ok: false, failure: 'secret-scan', findings: secrets.findings },
+                secrets,
+                proxy: detected.proxy,
+              })
+              return
+            }
             const push = await pushRepo({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
             const repo = await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
-            sendJson(res, 200, { ok: push.ok, proxy: detected.proxy, push, repo })
+            sendJson(res, 200, { ok: push.ok, proxy: detected.proxy, push, repo, secrets, forced: body.force === true })
             return
           }
           if (action === 'create') {

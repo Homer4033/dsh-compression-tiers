@@ -45,14 +45,17 @@
 - 改动后运行 `npm test`；新增档位、路由或同步逻辑必须补 `node:test` 用例。
 - 修改 `src/rules.js`、`/compression-tiers/api/rules` 或设置页规则面板后，必须让 `test/rules.test.js` 与 `test/client.test.js` 覆盖读取、归一化、413、摘要与面板状态。
 - 修改 `src/gh.js`、`/compression-tiers/api/github` 或 GitHub CLI 面板后，`test/gh.test.js` 必须覆盖状态、断点续传、416 重启、PATH 前插与设备码解析；真实下载/安装只在临时 home 验证，不写用户 DSH home。
-- 修改 `src/publish.js`、`/compression-tiers/api/github/network`、`/repo` 或推送动作后，`test/publish.test.js` 必须覆盖代理归一化与优先级、GitHub 连通判定（直连 / 代理 / 代理不通 / 全断）、失败分类、push 的代理注入与超时终止、仓库快照与建仓确认。
+- 修改 `src/publish.js`、`/compression-tiers/api/github/network`、`/repo` 或推送动作后，`test/publish.test.js` 必须覆盖代理归一化与优先级、GitHub 连通判定（直连 / 代理 / 代理不通 / 全断）、失败分类、push 的代理注入与超时终止、仓库快照、建仓确认与密钥扫描。
+- 发布前运行 `npm run check:secrets`；新增运行时文件、改 `package.json` 的 `files` 或版本号后同步 `CHANGELOG.md` 并按版本打 tag（`vX.Y.Z`）。
 - 修改 manifest、locale、图标或 `client.js` 注册方式后，检查 `test/manifest.test.js` 全绿。
 - 安装验证以插件页的 `application` 结果与新会话中的工具/设置为准，不以下载或日志推断成功。
 - 无法在浏览器中确认的视觉效果，交付时明确写"渲染未验证"。
 
 ## 文档索引
 
-- [README.md](README.md)：安装、使用、档位表、工具、原理、限制。
+- [README.md](README.md)：安装、使用、档位表、工具、原理、限制、发布与版本。
+- [CHANGELOG.md](CHANGELOG.md)：按版本记录变更与 tag。
+- [scripts/check-secrets.mjs](scripts/check-secrets.mjs)：`npm run check:secrets`，CI 与本地共用的密钥扫描入口。
 - [docs/DETAIL.md](docs/DETAIL.md)：插件详情页（英文，单图）。
 - [docs/DETAIL.zh.md](docs/DETAIL.zh.md)：插件详情页（中文，单图）。
 - [locale/en.json](locale/en.json)、[locale/zh.json](locale/zh.json)：插件管理器元数据与描述。
@@ -66,3 +69,4 @@
 - 2026-11-18：合并 GitHub CLI 功能：新增 `src/gh.js`（固定 `gh 2.76.2`、断点续传、原子安装回滚、设备码登录）、`/compression-tiers/api/github` 与 `/auth` 路由、设置页 GitHub CLI 面板；版本升到 1.2.0。
 - 2026-11-18：把 `@deepseek-ai/dsh-home-paths`、`@deepseek-ai/dsh-tools` 声明为可选 `peerDependencies`：以本地目录链接（linked root）方式安装时，DSH 的解析层靠包的 peer 声明把宿主导入路由到运行时实现，缺声明会导致 Host 半区导入失败、插件不激活；版本 1.2.1。
 - 2026-11-18：GitHub 面板补上「能发出去」这一段：新增 `src/publish.js`（代理探测、DNS/TCP 体检、带超时与进程树清理的 push、仓库快照、建仓），`gh auth status --json hosts` 读 scopes，设置里加 `github.repoPath/remote/branch/proxy`，新增 `network` / `repo` 路由与 `configure` / `push` / `create` / `view` 动作；版本 1.3.0。
+- 2026-11-18：发布规范：`src/publish.js` 增加 `scanSecrets`（文件名 + 内容两类密钥规则），推送前命中即阻止并可人工放行；新增 `scripts/check-secrets.mjs`（`npm run check:secrets`）与 CI 步骤，CI 覆盖 Windows 与 Linux；补 `CHANGELOG.md`，按版本打 tag；版本 1.3.1。

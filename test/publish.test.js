@@ -18,6 +18,7 @@ import {
   pushRepo,
   repoSnapshot,
   resolveRepoPath,
+  scanSecrets,
 } from '../src/publish.js'
 
 function ok(stdout) {
@@ -361,8 +362,59 @@ test('repoSnapshot falls back to the current branch when none is configured', as
 
 test('the repository path falls back to the plugin checkout', () => {
   const root = 'C:/plugins/compression'
+  const absolute = process.platform === 'win32' ? 'D:/DSH插件/压缩上下文' : '/opt/compression'
   assert.equal(resolveRepoPath({ repoPath: '' }, root), root)
-  assert.equal(resolveRepoPath({ repoPath: 'D:/DSH插件/压缩上下文' }, root), 'D:/DSH插件/压缩上下文')
+  assert.equal(resolveRepoPath({ repoPath: absolute }, root), absolute)
   assert.equal(resolveRepoPath({ repoPath: 'sub/repo' }, root), join(root, 'sub/repo'))
   assert.equal(resolveRepoPath(null, root), root)
+})
+
+test('scanSecrets blocks credential files and token-shaped lines', async () => {
+  const cwd = tempRepo()
+  try {
+    const files = ['src/ok.js', 'config/keys.json', 'src/leak.js']
+    const run = fakeRun([[/ls-files -z/, ok(files.join('\0') + '\0')]])
+    const tokenValue = 'gh' + 'p_' + 'x'.repeat(30)
+    const readFile = (path) => {
+      if (path.endsWith('ok.js')) return 'export const one = 1\n'
+      if (path.endsWith('leak.js')) return `export const value = '${tokenValue}'\n`
+      return ''
+    }
+    const report = await scanSecrets(cwd, { run, readFile, sizeOf: () => 10 })
+    assert.equal(report.ok, false)
+    assert.equal(report.files, 3)
+    assert.equal(report.findings.some((item) => item.kind === 'sensitive-path' && item.file === 'config/keys.json'), true)
+    assert.equal(report.findings.some((item) => item.kind === 'github-token' && item.line === 1), true)
+    assert.equal(report.scanned, 2)
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
+})
+
+test('scanSecrets passes a clean worktree and reports a non-repository', async () => {
+  const cwd = tempRepo()
+  try {
+    const clean = await scanSecrets(cwd, {
+      run: fakeRun([[/ls-files -z/, ok('index.js\0README.md\0')]]),
+      readFile: () => 'export const a = 1\n',
+      sizeOf: () => 12,
+    })
+    assert.equal(clean.ok, true)
+    assert.equal(clean.findings.length, 0)
+    assert.equal(clean.scanned, 2)
+
+    const notRepo = await scanSecrets(cwd, { run: fakeRun([[/ls-files -z/, fail('fatal: not a git repository')]]) })
+    assert.equal(notRepo.ok, true)
+    assert.equal(notRepo.error, 'not-a-git-repository')
+
+    const binary = await scanSecrets(cwd, {
+      run: fakeRun([[/ls-files -z/, ok('logo.png\0src/a.js\0')]]),
+      readFile: () => 'export const a = 1\n',
+      sizeOf: () => 12,
+    })
+    assert.equal(binary.skipped, 1)
+    assert.equal(binary.scanned, 1)
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
 })

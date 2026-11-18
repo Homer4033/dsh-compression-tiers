@@ -7,7 +7,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # This plugin is developed on Windows (junctions, taskkill, registry proxy)
+    # and must keep working on Linux, so both are exercised.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,3 +21,6 @@ jobs:
           node-version: 24
       - name: Test
         run: npm test
+      - name: Secret scan
+        run: node scripts/check-secrets.mjs
+        if: always()

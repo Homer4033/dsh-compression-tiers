@@ -49,6 +49,14 @@
 
 **升级**：替换目录后重新安装，或按插件页的升级流程操作；替换已安装包后需要重启 DSH 才能加载新的 Host 模块。
 
+## 发布与版本
+
+版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag，变更写在 [CHANGELOG.md](CHANGELOG.md)。
+
+- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.3.1`
+- CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与设置页推送前的检查同源
+- 本地自查：`npm run check:secrets`
+
 ## 使用
 
 打开 **设置 → 上下文压缩**，点一个档位即可。切换会：
