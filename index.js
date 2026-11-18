@@ -557,7 +557,9 @@ export function apply(ctx) {
         const detected = await detectProxy({ cwd, override: settings.proxy })
         sendJson(res, 200, {
           ok: true,
-          repo: await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy }),
+          // The panel reads this on mount: keep the remote lookup short so a
+          // flaky GitHub never leaves the section blank for long.
+          repo: await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy, timeoutMs: 8000 }),
           proxy: detected.proxy,
           settings,
         })
