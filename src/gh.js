@@ -430,32 +430,73 @@ export function prependGhPath(home, platform = process.platform) {
   return true
 }
 
+/** Text output of `gh auth status` → account and token scopes. */
 export function parseGhAuthStatus(output) {
-  const account = /Logged in to github\.com account ([^\s(]+)/i.exec(String(output || ''))?.[1] || null
-  return { authenticated: Boolean(account), account }
+  const text = String(output || '')
+  const account = /Logged in to github\.com account ([^\s(]+)/i.exec(text)?.[1] || null
+  const scopeLine = /Token scopes:\s*(.+)/i.exec(text)
+  const scopes = scopeLine ? [...scopeLine[1].matchAll(/'([^']+)'/g)].map((match) => match[1]) : []
+  return { authenticated: Boolean(account), account, scopes }
 }
 
 /**
- * Ask `gh` whether github.com is logged in. The panel needs a yes/no and the
- * account name, so plain `gh auth status` output is parsed instead of `--json`
- * flags that older releases lack.
+ * `gh auth status --json hosts` → the active github.com account and its scopes.
+ * Older releases lack `--json`; the caller falls back to the text parser.
+ */
+export function parseGhAuthJson(output) {
+  let parsed
+  try {
+    parsed = JSON.parse(String(output || ''))
+  } catch {
+    return { authenticated: false, account: null, scopes: [] }
+  }
+  const hosts = parsed && typeof parsed === 'object' ? parsed.hosts : null
+  const entries = hosts && typeof hosts === 'object' ? hosts['github.com'] : null
+  const entry = Array.isArray(entries) && entries.length
+    ? (entries.find((item) => item && item.active && item.state !== 'failed') || entries.find((item) => item && item.state !== 'failed') || null)
+    : null
+  if (!entry) return { authenticated: false, account: null, scopes: [] }
+  const scopes = Array.isArray(entry.scopes)
+    ? entry.scopes.filter((scope) => typeof scope === 'string')
+    : typeof entry.scopes === 'string' ? entry.scopes.split(/[,\s]+/).filter(Boolean) : []
+  return {
+    authenticated: entry.state !== 'failed' && (entry.state === 'success' || Boolean(entry.login)),
+    account: typeof entry.login === 'string' ? entry.login : null,
+    scopes,
+  }
+}
+
+/**
+ * Ask `gh` whether github.com is logged in and which scopes the token carries.
+ * Private repositories need `repo`; a token without it fails at push time with a
+ * bare 403, so the panel warns as soon as the state is read.
  */
 export async function ghAuthStatus(home, { platform = process.platform, arch = process.arch, envPath = process.env.PATH } = {}) {
   const gh = resolveGh(home, platform, envPath)
-  if (!gh) return { available: false, authenticated: false, account: null, path: null, version: null, detail: '' }
-  const result = await runCommand(gh, ['auth', 'status'], { timeoutMs: VERIFY_TIMEOUT_MS })
+  if (!gh) return { available: false, authenticated: false, account: null, scopes: [], missingRepoScope: false, path: null, version: null, detail: '', source: 'none' }
+  const asJson = await runCommand(gh, ['auth', 'status', '--json', 'hosts'], { timeoutMs: VERIFY_TIMEOUT_MS })
   const version = await runCommand(gh, ['--version'], { timeoutMs: VERIFY_TIMEOUT_MS })
-  const detail = `${result.stdout}${result.stderr}`.trim()
-  const parsed = parseGhAuthStatus(detail)
+  let parsed = asJson.code === 0 ? parseGhAuthJson(asJson.stdout) : { authenticated: false, account: null, scopes: [] }
+  let source = 'json'
+  let detail = `${asJson.stdout}${asJson.stderr}`.trim()
+  if (!parsed.account) {
+    const asText = await runCommand(gh, ['auth', 'status'], { timeoutMs: VERIFY_TIMEOUT_MS })
+    parsed = parseGhAuthStatus(`${asText.stdout}${asText.stderr}`)
+    source = 'text'
+    detail = `${asText.stdout}${asText.stderr}`.trim()
+  }
   const firstLine = `${version.stdout}${version.stderr}`.trim().split(/\r?\n/)[0] || ''
   const versionText = /gh version (\S+)/i.exec(firstLine)?.[1] || null
   return {
     available: true,
-    authenticated: result.code === 0 && parsed.authenticated,
+    authenticated: parsed.authenticated,
     account: parsed.account,
+    scopes: parsed.scopes,
+    missingRepoScope: Boolean(parsed.authenticated && parsed.scopes.length > 0 && !parsed.scopes.includes('repo')),
     path: gh,
     version: versionText,
     detail,
+    source,
   }
 }
 

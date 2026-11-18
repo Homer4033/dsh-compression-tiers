@@ -9,6 +9,8 @@ window.__ModuleLoader__.load({
     const RULES_API = '/compression-tiers/api/rules'
     const GH_API = '/compression-tiers/api/github'
     const GH_AUTH_API = '/compression-tiers/api/github/auth'
+    const GH_NETWORK_API = '/compression-tiers/api/github/network'
+    const GH_REPO_API = '/compression-tiers/api/github/repo'
 
     const DICTIONARIES = {
       zh: {
@@ -85,6 +87,42 @@ window.__ModuleLoader__.load({
         ghCancel: '取消登录',
         ghLoadFailed: '读取 GitHub CLI 状态失败：',
         ghActionFailed: '操作失败：',
+        ghRepoPathLabel: '仓库路径',
+        ghRepoPathPlaceholder: '仓库路径，留空使用本插件目录',
+        ghSavePath: '保存路径',
+        ghSaved: '已保存。',
+        ghNetwork: '网络体检',
+        ghNetworkLabel: '网络',
+        ghRefreshRepo: '刷新仓库',
+        ghPush: '推送',
+        ghPushing: '推送中…',
+        ghPushed: '已推送。',
+        ghNoRemote: '无远端',
+        ghNotGit: '不是 git 仓库',
+        ghLocal: '本地 ',
+        ghRemote: '远端 ',
+        ghPending: '待推 ',
+        ghDirty: '未提交 ',
+        ghRemoteAhead: '远端有新提交',
+        ghNetworkDirect: '直连可用',
+        ghNetworkProxy: '需走代理',
+        ghNetworkProxyDead: '代理不通',
+        ghNetworkBlocked: '连不上 GitHub',
+        ghNetworkUnknown: '未知',
+        ghDnsOff: 'DNS 不是 GitHub 地址',
+        ghScopeMissing: '令牌缺少 repo scope，私有仓库推送会失败。',
+        ghPushFailedNetwork: '推送失败：网络或代理',
+        ghPushFailedAuth: '推送失败：认证',
+        ghPushFailedNonFF: '推送失败：远端有新提交，先拉取合并',
+        ghPushFailedTimeout: '推送超时，已终止进程',
+        ghPushFailedConfig: '推送失败：先设置仓库路径',
+        ghPushFailedOther: '推送失败：',
+        ghRepoLoadFailed: '读取仓库状态失败：',
+        ghCreate: '建私有仓',
+        ghCreateConfirm: '确认建私有仓并推送',
+        ghCreateNamePlaceholder: '仓库名',
+        ghCreateDone: '已创建并推送。',
+        ghCreateFailed: '建仓失败：',
       },
       en: {
         sectionLabel: 'Context compression',
@@ -160,6 +198,42 @@ window.__ModuleLoader__.load({
         ghCancel: 'Cancel sign-in',
         ghLoadFailed: 'Could not read the GitHub CLI state: ',
         ghActionFailed: 'Action failed: ',
+        ghRepoPathLabel: 'Repository path',
+        ghRepoPathPlaceholder: 'Repository path; leave empty to use this plugin directory',
+        ghSavePath: 'Save path',
+        ghSaved: 'Saved.',
+        ghNetwork: 'Check network',
+        ghNetworkLabel: 'Network',
+        ghRefreshRepo: 'Refresh repo',
+        ghPush: 'Push',
+        ghPushing: 'Pushing…',
+        ghPushed: 'Pushed.',
+        ghNoRemote: 'no remote',
+        ghNotGit: 'not a git repository',
+        ghLocal: 'local ',
+        ghRemote: 'remote ',
+        ghPending: 'pending ',
+        ghDirty: 'dirty ',
+        ghRemoteAhead: 'remote has new commits',
+        ghNetworkDirect: 'direct works',
+        ghNetworkProxy: 'needs the proxy',
+        ghNetworkProxyDead: 'proxy unreachable',
+        ghNetworkBlocked: 'GitHub unreachable',
+        ghNetworkUnknown: 'unknown',
+        ghDnsOff: 'DNS is not a GitHub address',
+        ghScopeMissing: 'The token has no repo scope; pushing a private repository will fail.',
+        ghPushFailedNetwork: 'Push failed: network or proxy',
+        ghPushFailedAuth: 'Push failed: authentication',
+        ghPushFailedNonFF: 'Push failed: remote has new commits, pull first',
+        ghPushFailedTimeout: 'Push timed out; the process tree was killed',
+        ghPushFailedConfig: 'Push failed: set the repository path first',
+        ghPushFailedOther: 'Push failed: ',
+        ghRepoLoadFailed: 'Could not read the repository: ',
+        ghCreate: 'Create private repo',
+        ghCreateConfirm: 'Confirm: create and push',
+        ghCreateNamePlaceholder: 'Repository name',
+        ghCreateDone: 'Created and pushed.',
+        ghCreateFailed: 'Create failed: ',
       },
     }
 
@@ -309,6 +383,27 @@ window.__ModuleLoader__.load({
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
 }
+.ct-input {
+  box-sizing: border-box;
+  flex: 1 1 240px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+}
+.ct-input::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+.ct-input:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
 .ct-row {
   display: flex;
   flex-wrap: wrap;
@@ -408,7 +503,15 @@ window.__ModuleLoader__.load({
       const [auth, setAuth] = React.useState(null)
       const [ghMessage, setGhMessage] = React.useState('')
       const [ghBusy, setGhBusy] = React.useState(false)
+      const [network, setNetwork] = React.useState(null)
+      const [repo, setRepo] = React.useState(null)
+      const [repoPathDraft, setRepoPathDraft] = React.useState('')
+      const [repoBusy, setRepoBusy] = React.useState('')
+      const [repoMessage, setRepoMessage] = React.useState('')
+      const [createName, setCreateName] = React.useState('')
+      const [createArmed, setCreateArmed] = React.useState(false)
       const mounted = React.useRef(true)
+      const pathTouched = React.useRef(false)
       const buttons = React.useRef({})
 
       React.useEffect(function () {
@@ -417,6 +520,8 @@ window.__ModuleLoader__.load({
         loadRules()
         loadGithub()
         loadAuth()
+        loadNetwork()
+        loadRepo()
         return function () {
           mounted.current = false
         }
@@ -442,6 +547,9 @@ window.__ModuleLoader__.load({
             if (!mounted.current) return
             setState(body)
             setMessage('')
+            if (!pathTouched.current) {
+              setRepoPathDraft((body && body.github && body.github.repoPath) || '')
+            }
           })
           .catch(function (error) {
             if (!mounted.current) return
@@ -587,6 +695,115 @@ window.__ModuleLoader__.load({
         const login = gh && gh.login
         const url = login && login.url ? login.url : 'https://github.com/login/device'
         window.open(url, '_blank', 'noopener,noreferrer')
+      }
+
+      function loadNetwork() {
+        return fetch(GH_NETWORK_API, { credentials: 'same-origin' })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            setNetwork(body && body.network ? body.network : null)
+          })
+          .catch(function () {
+            if (!mounted.current) return
+            setNetwork(null)
+          })
+      }
+
+      function loadRepo() {
+        return fetch(GH_REPO_API, { credentials: 'same-origin' })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            setRepo(body && body.repo ? body.repo : null)
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setRepoMessage(t('ghRepoLoadFailed') + (error && error.message ? error.message : String(error)))
+          })
+      }
+
+      function saveRepoPath() {
+        if (repoBusy) return
+        setRepoBusy('save')
+        setRepoMessage('')
+        githubAction({ action: 'configure', repoPath: repoPathDraft })
+          .then(function (body) {
+            if (!mounted.current) return
+            setState(body)
+            pathTouched.current = false
+            setRepoPathDraft((body && body.github && body.github.repoPath) || '')
+            setRepoMessage(t('ghSaved'))
+            return Promise.all([loadRepo(), loadNetwork()])
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setRepoMessage(t('ghActionFailed') + (error && error.message ? error.message : String(error)))
+          })
+          .then(function () {
+            if (mounted.current) setRepoBusy('')
+          })
+      }
+
+      function pushErrorText(body) {
+        const push = body && body.push ? body.push : {}
+        const prefix = push.failure === 'network' ? t('ghPushFailedNetwork')
+          : push.failure === 'timeout' ? t('ghPushFailedTimeout')
+            : push.failure === 'auth' ? t('ghPushFailedAuth')
+              : push.failure === 'non-fast-forward' ? t('ghPushFailedNonFF')
+                : push.failure === 'config' ? t('ghPushFailedConfig')
+                  : t('ghPushFailedOther') + (push.failure || 'unknown')
+        const tail = push.output ? push.output.split(/\r?\n/).filter(Boolean).slice(-1)[0] : ''
+        return tail ? prefix + t('sep') + tail : prefix
+      }
+
+      function pushNow() {
+        if (repoBusy) return
+        setRepoBusy('push')
+        setRepoMessage(t('ghPushing'))
+        githubAction({ action: 'push' })
+          .then(function (body) {
+            if (!mounted.current) return
+            if (body && body.repo) setRepo(body.repo)
+            setRepoMessage(body && body.ok ? t('ghPushed') : pushErrorText(body))
+            return loadNetwork()
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setRepoMessage(t('ghActionFailed') + (error && error.message ? error.message : String(error)))
+          })
+          .then(function () {
+            if (mounted.current) setRepoBusy('')
+          })
+      }
+
+      function createNow() {
+        if (repoBusy) return
+        if (!createArmed) {
+          setCreateArmed(true)
+          window.setTimeout(function () {
+            if (mounted.current) setCreateArmed(false)
+          }, 6000)
+          return
+        }
+        setCreateArmed(false)
+        setRepoBusy('create')
+        setRepoMessage('')
+        githubAction({ action: 'create', name: createName, visibility: 'private', confirm: true })
+          .then(function (body) {
+            if (!mounted.current) return
+            if (body && body.repo) setRepo(body.repo)
+            if (body && body.ok) setRepoMessage(t('ghCreateDone'))
+            else setRepoMessage(t('ghCreateFailed') + ((body && body.create && body.create.error) || 'unknown'))
+            return loadNetwork()
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setRepoMessage(t('ghActionFailed') + (error && error.message ? error.message : String(error)))
+          })
+          .then(function () {
+            if (mounted.current) setRepoBusy('')
+          })
       }
 
       function select(id) {
@@ -783,6 +1000,81 @@ window.__ModuleLoader__.load({
             : null,
           login.error ? h('p', { className: 'ct-status', role: 'alert' }, login.error) : null)
         : null
+      const networkText = !network
+        ? ''
+        : network.verdict === 'direct' ? t('ghNetworkDirect')
+          : network.verdict === 'proxy' ? t('ghNetworkProxy') + (network.proxy ? ' ' + network.proxy.url : '')
+            : network.verdict === 'proxy-dead' ? t('ghNetworkProxyDead') + (network.proxy ? ' ' + network.proxy.url : '')
+              : network.verdict === 'blocked' ? t('ghNetworkBlocked')
+                : t('ghNetworkUnknown')
+      const dnsNote = network && network.dns && Array.isArray(network.dns.resolved) && network.dns.resolved.length > 0 && network.dns.knownGithub === false
+        ? t('ghDnsOff')
+        : ''
+      const repoLine = repo && repo.isRepo
+        ? (repo.branch || '') + ' · ' + t('ghLocal') + (repo.localHead || '?')
+          + ' · ' + t('ghRemote') + (repo.remoteHead || t('ghNoRemote'))
+          + (repo.pendingCount ? ' · ' + t('ghPending') + repo.pendingCount : '')
+          + (repo.dirty ? ' · ' + t('ghDirty') + repo.dirty : '')
+          + (repo.updateAvailable && repo.behind === null ? ' · ' + t('ghRemoteAhead') : '')
+        : repo && repo.error ? (repo.error === 'not-a-git-repository' ? t('ghNotGit') : repo.error) : ''
+      const repoBlock = h('div', { className: 'ct-rules-head' },
+        h('div', { className: 'ct-row' },
+          h('input', {
+            className: 'ct-input',
+            type: 'text',
+            value: repoPathDraft,
+            placeholder: t('ghRepoPathPlaceholder'),
+            'aria-label': t('ghRepoPathLabel'),
+            onChange: function (event) {
+              pathTouched.current = true
+              setRepoPathDraft(event.target.value)
+            },
+            onKeyDown: function (event) {
+              if (event.key === 'Enter') saveRepoPath()
+            },
+          }),
+          h('button', { type: 'button', className: 'ct-save', disabled: Boolean(repoBusy), onClick: saveRepoPath }, t('ghSavePath'))),
+        networkText
+          ? h('p', { className: 'ct-note' }, t('ghNetworkLabel') + t('sep') + networkText + (dnsNote ? ' · ' + dnsNote : ''))
+          : null,
+        repoLine ? h('p', { className: 'ct-note' }, repoLine) : null,
+        h('div', { className: 'ct-row' },
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: Boolean(repoBusy),
+            onClick: function () {
+              if (repoBusy) return
+              setRepoBusy('network')
+              loadNetwork().then(function () {
+                if (mounted.current) setRepoBusy('')
+              })
+            },
+          }, t('ghNetwork')),
+          h('button', { type: 'button', className: 'ct-save', disabled: Boolean(repoBusy), onClick: loadRepo }, t('ghRefreshRepo')),
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: Boolean(repoBusy) || !repo || repo.isRepo !== true,
+            onClick: pushNow,
+          }, repoBusy === 'push' ? t('ghPushing') : t('ghPush'))),
+        repo && repo.isRepo && !repo.remoteUrl
+          ? h('div', { className: 'ct-row' },
+            h('input', {
+              className: 'ct-input',
+              type: 'text',
+              value: createName,
+              placeholder: t('ghCreateNamePlaceholder'),
+              onChange: function (event) { setCreateName(event.target.value) },
+            }),
+            h('button', {
+              type: 'button',
+              className: 'ct-save',
+              disabled: Boolean(repoBusy) || !createName.trim(),
+              onClick: createNow,
+            }, createArmed ? t('ghCreateConfirm') : t('ghCreate')))
+          : null,
+        repoMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, repoMessage) : null)
       const ghPanel = h('section', { className: 'ct-panel' },
         h('div', { className: 'ct-rules-head' },
           h('h3', null, t('ghTitle')),
@@ -816,7 +1108,11 @@ window.__ModuleLoader__.load({
             disabled: ghBusy || loggingIn || !auth || !auth.available,
             onClick: loginGh,
           }, auth && auth.authenticated ? t('ghRelogin') : t('ghLogin'))),
+        auth && auth.missingRepoScope
+          ? h('p', { className: 'ct-status', role: 'alert' }, t('ghScopeMissing'))
+          : null,
         ghLoginBlock,
+        repoBlock,
         ghMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, ghMessage) : null)
 
       return h('section', { className: 'ct-page' },

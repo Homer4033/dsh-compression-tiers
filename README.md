@@ -84,7 +84,19 @@
 - **下载**：内置固定版本 `gh 2.76.2`（Windows / Linux，x64 / arm64），从 `cli/cli` 官方 release 下载；支持 HTTP Range 断点续传、10 分钟超时、解压后先跑 `gh --version` 探测暂存副本，再原子替换，失败自动回滚旧二进制。
 - **登录**：调 `gh auth login --web` 走设备码流程：页面显示一次性验证码（可复制）、打开授权页、取消；`gh` 子进程在后台轮询，完成后自动刷新成「已登录：账号」。凭据存在 gh 自己的存储里，不写 DSH 数据目录。
 
-接口：`GET/POST /compression-tiers/api/github`（状态，动作 `download` / `login` / `cancel`）与 `GET /compression-tiers/api/github/auth`（`gh auth status` + `gh --version`），都走同一套同源校验。
+接口：`GET/POST /compression-tiers/api/github`（状态，动作 `download` / `login` / `cancel` / `configure` / `push` / `create` / `view`）与 `GET /compression-tiers/api/github/auth`（`gh auth status --json hosts` + `gh --version`），都走同一套同源校验。
+
+**登录状态带 scopes**：`gh auth status --json hosts` 可用时读 JSON，老版本回落到文本解析；缺 `repo` scope 时面板直接提示——私有仓库推送会 403，不用等到失败才发现。
+
+### 网络体检与推送
+
+只判断「gh 装了没有、登没登录」还不够：真正耗时间的是下一层——`http.proxy` 指着一个没人监听的端口、`github.com` 解析到不是 GitHub 的地址、或者 `git push` 卡住不返回。面板因此多了三块：
+
+- **网络体检**（`GET /compression-tiers/api/github/network`）：探 DNS、直连 443、对 `https://github.com/` 的 HEAD 请求、代理端口，给出 `direct` / `proxy` / `proxy-dead` / `blocked` 四种结论。只看 TCP 不够——被污染的解析结果照样能握手成功，只有 HTTPS 失败才说明此路不通；代理按「显式设置 → git `http.proxy` → 系统代理」的顺序确定，并在面板标出用的是哪一层。DNS 落在已知 GitHub 网段之外会单独提示（只是提示，不当失败）。
+- **仓库状态**（`GET /compression-tiers/api/github/repo`）：仓库路径（默认本插件目录，可改并持久化到设置）、当前分支、本地/远端 HEAD、待推提交、未提交改动；远端用 `git ls-remote` 现查，失败只标记不抛错。
+- **推送**（`POST` 动作 `push`）：`git push` 带 60 秒硬超时，超时用 `taskkill /T /F`（POSIX 下杀进程组）收掉整棵进程树，并设 `GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never` 防止卡在交互式认证；失败按 DNS / 网络代理 / 认证 / 非快进 / 仓库不存在分类，同时返回仍未推送的提交列表。代理可用时自动注入 `-c http.proxy=…`，不写进 git 全局配置。
+
+**建仓**（动作 `create`）默认私有，必须 `confirm: true` 且仓库名合法才会执行 `gh repo create --source … --remote origin --push`；只在仓库还没有远端时出现在面板上，并且要在按钮上再点一次确认。
 
 > 下载只校验大小与 `gh --version`，没有对压缩包固定 SHA-256；钉住的是官方 release URL。
 

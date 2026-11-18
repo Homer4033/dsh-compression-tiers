@@ -13,12 +13,28 @@ import { normalizeRoutes } from './routes.js'
  * derived cache that the reconciler rewrites.
  */
 
+export function defaultGithubSettings() {
+  return {
+    // Empty means "use this plugin's own checkout"; the panel shows the result.
+    repoPath: '',
+    remote: 'origin',
+    branch: '',
+    // Empty means "detect": git's http.proxy, then the system proxy.
+    proxy: '',
+  }
+}
+
 export function defaultSettings() {
   return {
     level: DEFAULT_LEVEL,
     modelRoutes: [],
     lastCompact: null,
+    github: defaultGithubSettings(),
   }
+}
+
+function text(value, fallback) {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
 export function normalizeSettings(value) {
@@ -27,6 +43,13 @@ export function normalizeSettings(value) {
   next.level = compactLevel(next.level)
   next.modelRoutes = normalizeRoutes(next.modelRoutes)
   next.lastCompact = next.lastCompact && typeof next.lastCompact === 'object' ? next.lastCompact : null
+  const github = value && typeof value === 'object' && value.github && typeof value.github === 'object' ? value.github : {}
+  next.github = {
+    repoPath: text(github.repoPath, base.github.repoPath),
+    remote: text(github.remote, base.github.remote),
+    branch: text(github.branch, base.github.branch),
+    proxy: text(github.proxy, base.github.proxy),
+  }
   return next
 }
 

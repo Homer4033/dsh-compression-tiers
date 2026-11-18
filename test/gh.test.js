@@ -15,6 +15,7 @@ import {
   ghRoot,
   ghStatus,
   githubLoginStatus,
+  parseGhAuthJson,
   parseGhAuthStatus,
   prependGhPath,
   resolveGh,
@@ -237,13 +238,29 @@ test('prependGhPath puts the managed bin directory first exactly once', () => {
   }
 })
 
-test('gh auth status output is reduced to the account name', () => {
+test('gh auth status output is reduced to the account name and scopes', () => {
   assert.deepEqual(
-    parseGhAuthStatus('github.com\n  ✓ Logged in to github.com account Homer4033 (keyring)\n'),
-    { authenticated: true, account: 'Homer4033' },
+    parseGhAuthStatus('github.com\n  ✓ Logged in to github.com account Homer4033 (keyring)\n  - Token scopes: \'repo\', \'read:org\'\n'),
+    { authenticated: true, account: 'Homer4033', scopes: ['repo', 'read:org'] },
   )
-  assert.deepEqual(parseGhAuthStatus('You are not logged into any GitHub hosts.'), { authenticated: false, account: null })
-  assert.deepEqual(parseGhAuthStatus(''), { authenticated: false, account: null })
+  assert.deepEqual(parseGhAuthStatus('You are not logged into any GitHub hosts.'), { authenticated: false, account: null, scopes: [] })
+  assert.deepEqual(parseGhAuthStatus(''), { authenticated: false, account: null, scopes: [] })
+})
+
+test('the JSON auth state carries scopes for the active account', () => {
+  const json = JSON.stringify({
+    hosts: {
+      'github.com': [
+        { state: 'failed', active: false, login: 'old' },
+        { state: 'success', active: true, login: 'Homer4033', scopes: ['repo', 'read:org'] },
+      ],
+    },
+  })
+  assert.deepEqual(parseGhAuthJson(json), { authenticated: true, account: 'Homer4033', scopes: ['repo', 'read:org'] })
+  const stringScopes = JSON.stringify({ hosts: { 'github.com': [{ state: 'success', login: 'x', scopes: 'gist, read:org' }] } })
+  assert.deepEqual(parseGhAuthJson(stringScopes), { authenticated: true, account: 'x', scopes: ['gist', 'read:org'] })
+  assert.deepEqual(parseGhAuthJson('not json'), { authenticated: false, account: null, scopes: [] })
+  assert.deepEqual(parseGhAuthJson(JSON.stringify({ hosts: {} })), { authenticated: false, account: null, scopes: [] })
 })
 
 test('login cannot start without an installed gh and cancel is harmless', () => {

@@ -6,7 +6,20 @@ import { attachContextMeter, compactionWindowNote, contextReportText, readContex
 import { attachCompactQueue, COMPACT_TOOL_NAME, resolveCompaction } from './src/manual-compact.js'
 import { readSettings, writeSettings } from './src/store.js'
 import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/rules.js'
-import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, prependGhPath, startGhDownload } from './src/gh.js'
+import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
+import {
+  createRepo,
+  detectProxy,
+  networkReport,
+  normalizeProxyUrl,
+  pushRepo,
+  repoSnapshot,
+  repoView,
+  resolveRepoPath,
+} from './src/publish.js'
+import { dirname, isAbsolute } from 'node:path'
+import { existsSync, statSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
 import { errorStatus, guard, readBody, sendJson } from './src/http.js'
 
@@ -23,6 +36,23 @@ function safeGet(ctx, key) {
 
 function homeDir() {
   return resolveDshHome()
+}
+
+/** This package's checkout: the default repository for the publishing panel. */
+const PLUGIN_ROOT = dirname(fileURLToPath(import.meta.url))
+
+function githubSettings() {
+  return readSettings(homeDir()).settings.github
+}
+
+function repoPath() {
+  return resolveRepoPath(githubSettings(), PLUGIN_ROOT)
+}
+
+/** `https://github.com/owner/name.git` → `owner/name`. */
+function nameFromRemote(url) {
+  const match = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(String(url || ''))
+  return match ? `${match[1]}/${match[2]}` : null
 }
 
 function trace(stage, detail) {
@@ -149,6 +179,7 @@ function statePayload(ctx) {
     routeLines: formatRouteLines(state.settings.modelRoutes),
     lastCompact: state.settings.lastCompact,
     paths: { settings: state.paths.settings },
+    github: { ...state.settings.github, repoPath: repoPath(), defaultRepoPath: PLUGIN_ROOT },
     ...engineSummary(ctx),
   }
 }
@@ -394,7 +425,88 @@ export function apply(ctx) {
             sendJson(res, 200, { ok: true, ...cancelGithubLogin() })
             return
           }
-          sendJson(res, 400, { error: 'action must be download, login, or cancel' })
+          if (action === 'configure') {
+            const github = githubSettings()
+            const patch = {}
+            if (body.repoPath !== undefined) {
+              const value = typeof body.repoPath === 'string' ? body.repoPath.trim() : ''
+              if (value && (!isAbsolute(value) || !existsSync(value) || !statSync(value).isDirectory())) {
+                sendJson(res, 400, { error: 'repository path must be an existing absolute directory' })
+                return
+              }
+              patch.repoPath = value
+            }
+            if (body.remote !== undefined) {
+              const value = typeof body.remote === 'string' ? body.remote.trim() : ''
+              if (!/^[A-Za-z0-9._/-]+$/.test(value)) {
+                sendJson(res, 400, { error: 'remote name is invalid' })
+                return
+              }
+              patch.remote = value
+            }
+            if (body.branch !== undefined) {
+              const value = typeof body.branch === 'string' ? body.branch.trim() : ''
+              if (value && !/^[A-Za-z0-9._/-]+$/.test(value)) {
+                sendJson(res, 400, { error: 'branch name is invalid' })
+                return
+              }
+              patch.branch = value
+            }
+            if (body.proxy !== undefined) {
+              const value = typeof body.proxy === 'string' ? body.proxy.trim() : ''
+              if (value && !normalizeProxyUrl(value)) {
+                sendJson(res, 400, { error: 'proxy must be host:port or an http(s) URL' })
+                return
+              }
+              patch.proxy = value
+            }
+            writeSettings(homeDir(), { settings: { github: { ...github, ...patch } } })
+            sendJson(res, 200, { ok: true, ...statePayload(ctx) })
+            return
+          }
+          if (action === 'push') {
+            const settings = githubSettings()
+            const cwd = repoPath()
+            const detected = await detectProxy({ cwd, override: settings.proxy })
+            const push = await pushRepo({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
+            const repo = await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
+            sendJson(res, 200, { ok: push.ok, proxy: detected.proxy, push, repo })
+            return
+          }
+          if (action === 'create') {
+            const settings = githubSettings()
+            const cwd = repoPath()
+            const detected = await detectProxy({ cwd, override: settings.proxy })
+            const created = await createRepo({
+              gh: resolveGh(homeDir()),
+              cwd,
+              name: body.name,
+              visibility: body.visibility,
+              confirm: body.confirm === true,
+              proxy: detected.proxy,
+            })
+            const repo = created.ok
+              ? await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
+              : null
+            sendJson(res, 200, { ok: created.ok, create: created, repo })
+            return
+          }
+          if (action === 'view') {
+            const settings = githubSettings()
+            const cwd = repoPath()
+            const detected = await detectProxy({ cwd, override: settings.proxy })
+            const snapshot = await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
+            const nameWithOwner = typeof body.nameWithOwner === 'string' && body.nameWithOwner.trim()
+              ? body.nameWithOwner.trim()
+              : nameFromRemote(snapshot.remoteUrl)
+            if (!nameWithOwner) {
+              sendJson(res, 400, { error: 'no repository name: pass nameWithOwner or configure a remote' })
+              return
+            }
+            sendJson(res, 200, { ok: true, view: await repoView({ gh: resolveGh(homeDir()), nameWithOwner, proxy: detected.proxy }) })
+            return
+          }
+          sendJson(res, 400, { error: 'unknown action: download, login, cancel, configure, push, create, view' })
           return
         }
         sendJson(res, 405, { error: 'GET or POST' })
@@ -415,6 +527,44 @@ export function apply(ctx) {
         sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
       }
     }, 'github auth route')
+
+    // Is GitHub reachable at all, and through which proxy? DNS, TCP and the
+    // configured proxies are all reported, because a stale `http.proxy` and a
+    // poisoned name are the two failures that look identical from git's output.
+    register('/compression-tiers/api/github/network', async (req, res) => {
+      if (guard(child, req, res)) return
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'GET' })
+        return
+      }
+      try {
+        const settings = githubSettings()
+        sendJson(res, 200, { ok: true, network: await networkReport({ cwd: repoPath(), override: settings.proxy }) })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'github network route')
+
+    register('/compression-tiers/api/github/repo', async (req, res) => {
+      if (guard(child, req, res)) return
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'GET' })
+        return
+      }
+      try {
+        const settings = githubSettings()
+        const cwd = repoPath()
+        const detected = await detectProxy({ cwd, override: settings.proxy })
+        sendJson(res, 200, {
+          ok: true,
+          repo: await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy }),
+          proxy: detected.proxy,
+          settings,
+        })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'github repo route')
   })
 
   // Presets mount after this plugin in the official composition and live in
