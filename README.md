@@ -45,6 +45,8 @@
 
 也可以在会话中让智能体用 `plugin_manager` 的 `install_bundle` 安装这个目录。安装由 DSH 完成包管理与 bundle 选择，不要手工改 profile 的 `package.json` / `cordis.patch.yml`。
 
+宿主包（`@deepseek-ai/dsh-home-paths`、`@deepseek-ai/dsh-tools`）由 DSH 运行时提供，本包只把它们声明为可选 `peerDependencies`：这样即使以「链接到 DSH 外部目录」的方式安装（不复制进 profile），DSH 的解析层也能把这两个导入路由到安装自带的实现。
+
 **升级**：替换目录后重新安装，或按插件页的升级流程操作；替换已安装包后需要重启 DSH 才能加载新的 Host 模块。
 
 ## 使用
