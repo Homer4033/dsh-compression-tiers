@@ -11,8 +11,6 @@ window.__ModuleLoader__.load({
     const GH_AUTH_API = '/compression-tiers/api/github/auth'
     const GH_NETWORK_API = '/compression-tiers/api/github/network'
     const GH_REPO_API = '/compression-tiers/api/github/repo'
-    const GH_REPOS_API = '/compression-tiers/api/github/repos'
-    const REPOS_PANEL_ID = 'compression-repos'
 
     const DICTIONARIES = {
       zh: {
@@ -121,25 +119,7 @@ window.__ModuleLoader__.load({
         ghPushFailedOther: '推送失败：',
         ghPushBlockedSecrets: '发现疑似密钥，已阻止推送。',
         ghPushAnyway: '仍然推送',
-        reposLabel: '仓库',
-        reposTitle: '仓库',
-        reposIntro: '左侧栏的「仓库」入口：每个仓库独立绑定、独立推送，多个 agent 各推各的，不会互相覆盖。',
-        reposEmpty: '还没有仓库，粘贴一个目录的绝对路径后点添加。',
-        reposAddPlaceholder: '仓库目录的绝对路径',
-        reposAdd: '添加',
-        reposRemove: '移除',
-        reposRefresh: '刷新',
-        reposPush: '推送',
-        reposPushing: '推送中…',
-        reposPushed: '已推送。',
-        reposPushFailed: '推送失败：',
-        reposLoadFailed: '读取仓库失败：',
-        reposNotGit: '不是 git 仓库',
-        reposNoRemote: '无远端',
-        reposLocal: '本地 ',
-        reposRemote: '远端 ',
-        reposPending: '待推 ',
-        reposDirty: '未提交 ',
+        ghToolNote: '这一栏只推上面的默认仓库。智能体想推自己所在的工作区时用 github_push 工具：先体检网络、扫密钥，再带超时推送。',
         ghRepoLoadFailed: '读取仓库状态失败：',
         ghCreate: '建私有仓',
         ghCreateConfirm: '确认建私有仓并推送',
@@ -253,25 +233,7 @@ window.__ModuleLoader__.load({
         ghPushFailedOther: 'Push failed: ',
         ghPushBlockedSecrets: 'A likely secret was found; the push was blocked.',
         ghPushAnyway: 'Push anyway',
-        reposLabel: 'Repositories',
-        reposTitle: 'Repositories',
-        reposIntro: 'The sidebar entry for repositories: each one is bound and pushed on its own, so several agents never overwrite each other.',
-        reposEmpty: 'No repository yet. Paste an absolute directory path and add it.',
-        reposAddPlaceholder: 'Absolute path of a repository directory',
-        reposAdd: 'Add',
-        reposRemove: 'Remove',
-        reposRefresh: 'Refresh',
-        reposPush: 'Push',
-        reposPushing: 'Pushing…',
-        reposPushed: 'Pushed.',
-        reposPushFailed: 'Push failed: ',
-        reposLoadFailed: 'Could not read the repositories: ',
-        reposNotGit: 'not a git repository',
-        reposNoRemote: 'no remote',
-        reposLocal: 'local ',
-        reposRemote: 'remote ',
-        reposPending: 'pending ',
-        reposDirty: 'dirty ',
+        ghToolNote: 'This section publishes the default repository above. Agents publish their own session workspace with the github_push tool: network probe, secret scan, then a timed push.',
         ghRepoLoadFailed: 'Could not read the repository: ',
         ghCreate: 'Create private repo',
         ghCreateConfirm: 'Confirm: create and push',
@@ -1093,6 +1055,7 @@ window.__ModuleLoader__.load({
           ? h('p', { className: 'ct-note' }, t('ghNetworkLabel') + t('sep') + networkText + (dnsNote ? ' · ' + dnsNote : ''))
           : null,
         repoLine ? h('p', { className: 'ct-note' }, repoLine) : null,
+        h('p', { className: 'ct-note' }, t('ghToolNote')),
         h('div', { className: 'ct-row' },
           h('button', {
             type: 'button',
@@ -1203,198 +1166,6 @@ window.__ModuleLoader__.load({
           : null)
     }
 
-    /** Sidebar panel: one row per configured repository, pushed independently. */
-    function ReposPage(props) {
-      const t = props.t
-      const [items, setItems] = React.useState(null)
-      const [message, setMessage] = React.useState('')
-      const [busy, setBusy] = React.useState('')
-      const [draft, setDraft] = React.useState('')
-      const [auth, setAuth] = React.useState(null)
-      const [blocked, setBlocked] = React.useState('')
-      const mounted = React.useRef(true)
-
-      React.useEffect(function () {
-        mounted.current = true
-        load()
-        fetch(GH_AUTH_API, { credentials: 'same-origin' })
-          .then(readJson)
-          .then(function (body) {
-            if (mounted.current) setAuth(body && body.auth ? body.auth : null)
-          })
-          .catch(function () {
-            if (mounted.current) setAuth(null)
-          })
-        return function () {
-          mounted.current = false
-        }
-      }, [])
-
-      function load() {
-        return fetch(GH_REPOS_API, { credentials: 'same-origin' })
-          .then(readJson)
-          .then(function (body) {
-            if (!mounted.current) return
-            setItems(Array.isArray(body.repos) ? body.repos : [])
-            setMessage('')
-          })
-          .catch(function (error) {
-            if (!mounted.current) return
-            setItems([])
-            setMessage(t('reposLoadFailed') + (error && error.message ? error.message : String(error)))
-          })
-      }
-
-      function paths() {
-        return (items || []).map(function (item) { return item.path })
-      }
-
-      function configure(repos) {
-        return fetch(GH_API, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'configure', repos: repos }),
-        })
-          .then(readJson)
-          .then(function (body) {
-            if (!mounted.current) return
-            setMessage(t('ghSaved'))
-            return load()
-          })
-          .catch(function (error) {
-            if (!mounted.current) return
-            setMessage(t('ghActionFailed') + (error && error.message ? error.message : String(error)))
-          })
-      }
-
-      function addRepo() {
-        const value = draft.trim()
-        if (!value || busy) return
-        setBusy('add')
-        configure(paths().concat([value]))
-          .then(function () { if (mounted.current) setDraft('') })
-          .then(function () { if (mounted.current) setBusy('') })
-      }
-
-      function removeRepo(path) {
-        if (busy) return
-        setBusy('remove:' + path)
-        configure(paths().filter(function (item) { return item !== path }))
-          .then(function () { if (mounted.current) setBusy('') })
-      }
-
-      function pushRepo(path, force) {
-        if (busy) return
-        setBusy('push:' + path)
-        setMessage(t('reposPushing'))
-        fetch(GH_API, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'push', repo: path, force: force === true }),
-        })
-          .then(readJson)
-          .then(function (body) {
-            if (!mounted.current) return
-            if (body && body.push && body.push.failure === 'secret-scan') {
-              setBlocked(path)
-              setMessage(t('ghPushBlockedSecrets'))
-              return
-            }
-            setBlocked('')
-            if (body && body.ok) setMessage(t('reposPushed'))
-            else setMessage(t('reposPushFailed') + ((body && body.push && body.push.failure) || 'unknown'))
-            return load()
-          })
-          .catch(function (error) {
-            if (!mounted.current) return
-            setMessage(t('ghActionFailed') + (error && error.message ? error.message : String(error)))
-          })
-          .then(function () {
-            if (mounted.current) setBusy('')
-          })
-      }
-
-      const rows = (items || []).map(function (item) {
-        const repo = item.repo || {}
-        const state = repo.isRepo
-          ? (repo.branch || '') + ' · ' + t('reposLocal') + (repo.localHead || '?')
-            + ' · ' + t('reposRemote') + (repo.remoteHead || t('reposNoRemote'))
-            + (repo.pendingCount ? ' · ' + t('reposPending') + repo.pendingCount : '')
-            + (repo.dirty ? ' · ' + t('reposDirty') + repo.dirty : '')
-          : (repo.error === 'not-a-git-repository' || !repo.error ? t('reposNotGit') : repo.error)
-        return h('div', { className: 'ct-panel', key: item.path },
-          h('div', { className: 'ct-row' },
-            h('span', { className: 'ct-note', style: { flex: '1 1 220px', minWidth: 0, wordBreak: 'break-all' } }, item.path),
-            h('button', {
-              type: 'button',
-              className: 'ct-save',
-              disabled: Boolean(busy) || repo.isRepo !== true,
-              onClick: function () { pushRepo(item.path) },
-            }, busy === 'push:' + item.path ? t('reposPushing') : t('reposPush')),
-            h('button', {
-              type: 'button',
-              className: 'ct-save',
-              disabled: Boolean(busy),
-              onClick: function () { removeRepo(item.path) },
-            }, t('reposRemove'))),
-          h('p', { className: 'ct-note' }, state))
-      })
-
-      return h('section', { className: 'ct-page' },
-        h('style', { key: 'style' }, CSS),
-        h('header', { className: 'ct-head' },
-          h('h2', null, t('reposTitle')),
-          h('p', { className: 'ct-intro' }, t('reposIntro'))),
-        h('div', { className: 'ct-row' },
-          h('input', {
-            className: 'ct-input',
-            type: 'text',
-            value: draft,
-            placeholder: t('reposAddPlaceholder'),
-            onChange: function (event) { setDraft(event.target.value) },
-            onKeyDown: function (event) { if (event.key === 'Enter') addRepo() },
-          }),
-          h('button', { type: 'button', className: 'ct-save', disabled: Boolean(busy) || !draft.trim(), onClick: addRepo }, t('reposAdd')),
-          h('button', { type: 'button', className: 'ct-save', disabled: Boolean(busy), onClick: load }, t('reposRefresh'))),
-        auth && auth.missingRepoScope
-          ? h('p', { className: 'ct-status', role: 'alert' }, t('ghScopeMissing'))
-          : null,
-        items === null
-          ? h('p', { className: 'ct-note' }, t('loading'))
-          : items.length > 0 ? rows : h('p', { className: 'ct-note' }, t('reposEmpty')),
-        blocked
-          ? h('div', { className: 'ct-row' },
-            h('button', {
-              type: 'button',
-              className: 'ct-save',
-              disabled: Boolean(busy),
-              onClick: function () { pushRepo(blocked, true) },
-            }, t('ghPushAnyway')))
-          : null,
-        message ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, message) : null)
-    }
-
-    function RepoIcon(props) {
-      const size = props && props.size ? props.size : 18
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 24 24',
-        fill: 'none',
-        stroke: 'currentColor',
-        'stroke-width': 1.5,
-        'stroke-linecap': 'round',
-        'stroke-linejoin': 'round',
-        'aria-hidden': 'true',
-        focusable: 'false',
-      },
-      h('path', { d: 'M6 4v10a3 3 0 0 0 3 3h9' }),
-      h('circle', { cx: 6, cy: 4, r: 2 }),
-      h('circle', { cx: 18, cy: 17, r: 2 }))
-    }
-
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
@@ -1405,23 +1176,6 @@ window.__ModuleLoader__.load({
         function SettingsPage() {
           return h(Page, { t: t })
         }
-        function ReposSection() {
-          return h(ReposPage, { t: t })
-        }
-        ctx.slots.inject('sidebar.panellist', function () {
-          return ctx.slots.register({
-            name: 'sidebar.panellist',
-            id: REPOS_PANEL_ID,
-            order: 46,
-            label: function () { return t('reposLabel') },
-          }, RepoIcon)
-        })
-        ctx.slots.inject('main', function () {
-          return ctx.slots.register({
-            name: 'main',
-            key: REPOS_PANEL_ID,
-          }, ReposSection)
-        })
         ctx.slots.inject('settings.section', function () {
           return ctx.slots.register({
             name: 'settings.section',

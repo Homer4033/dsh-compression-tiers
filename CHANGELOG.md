@@ -1,6 +1,15 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.3.1`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.5.0`。
+
+## 1.5.0 — 2026-11-19
+
+- **删掉左侧栏「仓库」面板**：官方「变更请求与工作树」bundle 已经在管仓库与工作树 UI，自建面板与它重复。移除 `sidebar.panellist` / `main` 两个注册、面板组件与图标、`repos*` 文案、`GET /api/github/repos` 路由和 `configure` 的 `repos` 字段（现在返回 400 说明已下线）。
+- **发布能力改成工具 `github_push`**：默认推本会话的工作目录（`workingDirectory`），其次设置页的「默认仓库」，可用 `repo` 指定绝对路径。内部固定走「网络体检 → 密钥扫描 → 60 秒超时的 push → 失败分类 + 待推列表」，命中密钥时阻止并提示可 `force`。
+- 新模块 `src/push-flow.js`：`resolvePushCwd` / `pushFlow` / `pushReportText`，设置页的 `push` 动作与工具共用同一段流程，安全规则不会两边不一致。
+- `github.repos` 从状态与归一化里移除（升级后下一次写入即清掉旧字段）；`push`/`create`/`view` 的 `repo` 参数改为接受任意存在的绝对目录。
+- 设置页 GitHub 一节补一句说明：那一栏只推默认仓库，工作区发布交给 `github_push`。
+- 新增 `test/push-flow.test.js`（目录解析、密钥拦截与放行、失败分类、报告文案、无仓库早退）。
 
 ## 1.4.1 — 2026-11-19
 

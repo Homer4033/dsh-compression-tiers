@@ -79,18 +79,21 @@ test('atomic text writes create missing directories and leave no temp file', () 
   }
 })
 
-test('github repositories are normalized and de-duplicated', () => {
+test('github settings keep the default repository and drop the retired repository list', () => {
   const home = tempHome()
   try {
     const empty = readSettings(home)
-    assert.deepEqual(empty.settings.github.repos, [])
+    assert.equal(empty.settings.github.repoPath, '')
     assert.equal(empty.settings.github.remote, 'origin')
 
     writeSettings(home, {
-      settings: { github: { repos: [' D:/a ', 'D:/b', { path: 'D:/a' }, '', 42, 'D:/b'] } },
+      settings: { github: { repoPath: ' D:/repo ', repos: ['D:/a', 'D:/b'] } },
     })
     const state = readSettings(home)
-    assert.deepEqual(state.settings.github.repos, ['D:/a', 'D:/b'])
+    assert.equal(state.settings.github.repoPath, 'D:/repo')
+    assert.equal('repos' in state.settings.github, false)
+    // The field is also gone from the file on disk, not only in memory.
+    assert.equal(readFileSync(settingsPaths(home).settings, 'utf8').includes('"repos"'), false)
   } finally {
     rmSync(home, { recursive: true, force: true })
   }

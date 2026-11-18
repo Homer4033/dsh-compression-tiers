@@ -2,7 +2,7 @@
 
 > 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的五档上下文压缩策略：设置页 + 智能体工具 + 实时占用提示 + 主动压缩。
 >
-> A five-tier context-compression policy for DeepSeek Harness: a settings page, three agent tools, a live occupancy line, and proactive compaction.
+> A five-tier context-compression policy for DeepSeek Harness: a settings page, four agent tools, a live occupancy line, and proactive compaction.
 >
 > 包名与仓库：`dsh-compression-tiers`（社区 `dsh-` 前缀；加载器行 id 为 `compression-tiers`）。
 
@@ -23,13 +23,14 @@
 
 ## 这是什么
 
-官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐五件事：
+官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐六件事：
 
 1. **设置页**：`设置 → 上下文压缩`，五个按钮直接切档，显示自动触发比例与逐字保留比例。
 2. **引擎同步**：选中的档位立即写入每个已挂载的 Agent 预设压缩引擎（官方组合里真正运行的引擎在预设隔离域，家庭补丁碰不到）。
 3. **智能体闭环**：`compression_context` 读实时占用，`compression_compact` 在需要时主动压缩并在本轮结束后自动续跑；对话尾部的 `[context]` 行给出同样的数字。
 4. **全局规则**：同一页下半部分直接编辑官方指令文件 `<DSH home>/AGENTS.md`，保存即原子写入，不另存副本。
 5. **GitHub CLI**：同一页管理 `gh`——识别系统 PATH、下载固定版本的托管副本、走设备码登录，供官方变更请求面板使用。
+6. **发布闭环**：`github_push` 工具让智能体把当前工作区发出去：先体检网络、扫密钥，再带超时推送并报出仍在本地的东西。
 
 本包从 `homerdsh-workbench` 的压缩子系统拆出，状态独立、工具名独立，可单独安装；全局规则与 GitHub CLI 面板也由工作台合并而来。
 
@@ -53,7 +54,7 @@
 
 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag，变更写在 [CHANGELOG.md](CHANGELOG.md)。
 
-- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.3.1`
+- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.5.0`
 - GitHub Release 页面按 tag 生成（[releases](https://github.com/Homer4033/dsh-compression-tiers/releases)），更新日志见 [CHANGELOG.md](CHANGELOG.md)
 - CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与设置页推送前的检查同源
 - 本地自查：`npm run check:secrets`
@@ -103,18 +104,18 @@
 
 - **网络体检**（`GET /compression-tiers/api/github/network`）：探 DNS、直连 443、对 `https://github.com/` 的 HEAD 请求、代理端口，给出 `direct` / `proxy` / `proxy-dead` / `blocked` 四种结论。只看 TCP 不够——被污染的解析结果照样能握手成功，只有 HTTPS 失败才说明此路不通；代理按「显式设置 → git `http.proxy` → 系统代理」的顺序确定，并在面板标出用的是哪一层。DNS 落在已知 GitHub 网段之外会单独提示（只是提示，不当失败）。
 - **仓库状态**（`GET /compression-tiers/api/github/repo`）：仓库路径（默认本插件目录，可改并持久化到设置）、当前分支、本地/远端 HEAD、待推提交、未提交改动；远端用 `git ls-remote` 现查，失败只标记不抛错。
-- **推送**（`POST` 动作 `push`）：`git push` 带 60 秒硬超时，超时用 `taskkill /T /F`（POSIX 下杀进程组）收掉整棵进程树，并设 `GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never` 防止卡在交互式认证；失败按 DNS / 网络代理 / 认证 / 非快进 / 仓库不存在分类，同时返回仍未推送的提交列表。代理可用时自动注入 `-c http.proxy=…`，不写进 git 全局配置。
+- **推送**（`POST` 动作 `push`）：`git push` 带 60 秒硬超时，超时用 `taskkill /T /F`（POSIX 下杀进程组）收掉整棵进程树，并设 `GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never` 防止卡在交互式认证；失败按 DNS / 网络代理 / 认证 / 非快进 / 仓库不存在分类，同时返回仍未推送的提交列表。代理可用时自动注入 `-c http.proxy=…`，不写进 git 全局配置。设置页与 `github_push` 工具共用这一段流程（`src/push-flow.js`），安全规则不会两边不一致。
 
 **建仓**（动作 `create`）默认私有，必须 `confirm: true` 且仓库名合法才会执行 `gh repo create --source … --remote origin --push`；只在仓库还没有远端时出现在面板上，并且要在按钮上再点一次确认。
 
-### 多仓库面板
+### 智能体发布：`github_push`
 
-设置页里的「默认仓库」只是一个兜底，真正管理多个仓库的是左侧栏的 **仓库** 面板（`sidebar.panellist` + `main`，id `compression-repos`）：
+1.4.x 的左侧栏「仓库」面板已经删除：官方「变更请求与工作树」bundle 已经在管仓库与工作树的 UI，再造一套面板只是重复。真正缺的那一步——「这一段工作该发出去了」——只有智能体自己知道，所以发布能力改成工具 `github_push`：
 
-- 每个仓库一行：路径、分支、本地/远端 HEAD、待推与未提交数，各自有「推送」与「移除」；
-- 推送按行发起（`POST` 动作 `push` 带 `repo`），多个 agent 各推各的仓库，不会再被一份全局路径互相覆盖；
-- 列表存在 `settings.json` 的 `github.repos`（绝对路径数组，按平台去重），空列表时回落到插件自己的检出目录；
-- 路由只接受列表内的路径，传别的路径返回 400，避免面板变成任意目录的推送入口。
+- **默认目录**：显式传 `repo` > 本会话的工作目录（`workingDirectory`，且必须是 git 检出）> 设置页里的「默认仓库」。插件自己的检出目录不在候选里，不会因为没配路径就把插件仓库推出去。
+- **流程**：网络体检（与设置页同源）→ 密钥扫描 → `git push`（60 秒硬超时、进程树清理）→ 失败分类与待推列表；命中的密钥会直接阻止推送，人工看过后再传 `force: true`。
+- **结果**：返回 `ok` / `failure` / `path` / `proxy` / `push` / `repo` / `secrets`，并附一段可直接引用的人类可读 `text`。
+- **设置页**：「默认仓库」与推送/建仓按钮仍在，负责把一个具体仓库（默认是本插件目录）推出去；面板删除后它不再是多仓库入口。
 
 > 下载只校验大小与 `gh --version`，没有对压缩包固定 SHA-256；钉住的是官方 release URL。
 
@@ -139,6 +140,7 @@
 | `compression_tiers` | 读取或切换档位；可选 `routeLines` 写入按路由覆盖（`provider model headroomTokens [retainTokens]`，每行一条，最多 16 条）。未知档位直接报错，不会静默回退。 |
 | `compression_context` | 只读：已用 tokens、窗口、本档自动阈值、压缩后逐字保留量、距自动压缩还剩多少。 |
 | `compression_compact` | 排队一次主动压缩：本轮 `turn/end` 后执行（可低于自动阈值），完成后发送 follow-up 自动续跑。 |
+| `github_push` | 发布当前工作区：`repo`（可选绝对路径）+ `force`（可选，绕过密钥拦截）。内部 = 网络体检 → 密钥扫描 → 带超时的 `git push` → 失败分类与待推列表，返回结构化结果与一段 `text`。 |
 
 `compression_compact` 需要预设隔离域里的压缩引擎。宿主侧只有 token 计量时，它会明确返回"没有可用的压缩服务"，而不是假装成功。
 
@@ -177,6 +179,7 @@
 - **登录凭据位置**：`gh auth login` 把凭据写进 gh 自己的存储（Windows 上是 `%APPDATA%\GitHub CLI`），不写 DSH 数据目录，也不会进转移包。
 - **浏览器刷新**：切换档位对引擎立即生效；设置页自身的状态通过接口刷新，个别情况下需要刷新页面重新读取。
 - **中文/英文**：设置页与插件详情按 DSH 语言环境显示；智能体面向的提示与工具描述为英文。
+- **1.4.x 的侧栏面板已删除**：升级到 1.5.0 后左侧栏不再有「仓库」入口，`settings.json` 里的 `github.repos` 会在下一次写入时被清掉。需要推多个仓库时，让智能体在对应工作区里调用 `github_push`（默认推该会话的工作目录），或分次在设置页改「默认仓库」。
 
 ## 为什么是这五档
 
@@ -188,7 +191,7 @@
 ## 开发
 
 ```bash
-npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、manifest 规范
+npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、发布流程、manifest 规范
 node --check index.js
 ```
 
@@ -204,6 +207,8 @@ src/manual-compact.js 主动压缩队列（compactNow + follow-up）
 src/store.js          状态文件读写（JSON 与原子文本写入）
 src/rules.js          全局规则文件：路径、读取、校验、原子写入、提示摘要
 src/gh.js             GitHub CLI：托管下载（断点续传/回滚）、PATH 检测、设备码登录
+src/publish.js        网络体检、仓库快照、带超时的 push、建仓、密钥扫描
+src/push-flow.js      发布流程：目录选择 → 代理 → 密钥扫描 → push → 报告（设置页与 github_push 共用）
 src/routes.js         按路由覆盖解析
 src/http.js           设置路由的同源/认证与 JSON 辅助
 test/                 node:test 单元测试与 manifest 检查

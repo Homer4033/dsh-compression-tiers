@@ -4,7 +4,7 @@ import { COMPRESSION_LEVELS, compressionSpec, levelForPolicy, parseLevel } from 
 import { presetCompactionEntries, presetEnginePolicies, syncPresetCompaction } from './src/presets.js'
 import { attachContextMeter, compactionWindowNote, contextReportText, readContextWindow, readMeter } from './src/context-meter.js'
 import { attachCompactQueue, COMPACT_TOOL_NAME, resolveCompaction } from './src/manual-compact.js'
-import { normalizeRepoList, readSettings, writeSettings } from './src/store.js'
+import { readSettings, writeSettings } from './src/store.js'
 import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/rules.js'
 import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
 import {
@@ -12,12 +12,11 @@ import {
   detectProxy,
   networkReport,
   normalizeProxyUrl,
-  pushRepo,
   repoSnapshot,
   repoView,
   resolveRepoPath,
-  scanSecrets,
 } from './src/publish.js'
+import { pushFlow, pushReportText, isRepoDir, resolvePushCwd } from './src/push-flow.js'
 import { dirname, isAbsolute } from 'node:path'
 import { existsSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -39,7 +38,7 @@ function homeDir() {
   return resolveDshHome()
 }
 
-/** This package's checkout: the default repository for the publishing panel. */
+/** This package's checkout: the last-resort default repository for the settings page. */
 const PLUGIN_ROOT = dirname(fileURLToPath(import.meta.url))
 
 function githubSettings() {
@@ -60,30 +59,34 @@ function queryParam(req, name) {
 }
 
 /**
- * Repositories managed from the sidebar panel: exactly what the user added,
- * nothing implicit. An empty list shows an empty panel; the fallback default
- * below exists only for the settings page and single-repository actions.
+ * The one directory the settings page publishes: the configured default
+ * repository, else this plugin's own checkout.
  */
-function repoList(settings = githubSettings()) {
-  return normalizeRepoList(settings.repos)
-}
-
 function defaultRepoPath(settings = githubSettings()) {
   return resolveRepoPath(settings, PLUGIN_ROOT)
 }
 
-function samePath(left, right) {
-  const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value)
-  return normalize(left) === normalize(right)
-}
-
-/** Resolve an optional `repo` argument; `undefined` means the default repository. */
+/**
+ * Resolve an optional `repo` argument: an explicit absolute directory wins,
+ * everything else falls back to the configured default repository.
+ */
 function repoFromRequest(value) {
   const wanted = typeof value === 'string' ? value.trim() : ''
   if (!wanted) return defaultRepoPath()
-  const listed = repoList().find((path) => samePath(path, wanted))
-  if (listed) return listed
-  return samePath(defaultRepoPath(), wanted) ? wanted : null
+  return isRepoDir(wanted) ? wanted : null
+}
+
+/** The directory the calling session lives in; empty when unavailable. */
+function sessionDirectory(ctx, exec) {
+  const session = exec && exec.agent ? exec.agent.session : undefined
+  const service = safeGet(ctx, 'workingDirectory')
+  if (!session || !service || typeof service.get !== 'function') return ''
+  try {
+    const directory = service.get(session)
+    return typeof directory === 'string' ? directory : ''
+  } catch {
+    return ''
+  }
 }
 
 /** `https://github.com/owner/name.git` → `owner/name`. */
@@ -219,7 +222,6 @@ function statePayload(ctx) {
     github: {
       ...state.settings.github,
       repoPath: repoPath(),
-      repos: repoList(state.settings),
       defaultRepoPath: PLUGIN_ROOT,
     },
     ...engineSummary(ctx),
@@ -367,6 +369,54 @@ export function apply(ctx) {
     },
   })), 'compression-tiers: tiers tool')
 
+  // Publishing, as a tool instead of a sidebar panel: the official change
+  // request bundle already owns the repository UI, and an agent that just
+  // finished a piece of work is the one that knows a commit should leave the
+  // machine. The flow itself is shared with the settings page.
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'github_push',
+    description: 'Publish the current work over git: probe how GitHub is reachable, scan tracked files for credentials, then push with a 60s deadline and report the failure family plus whatever is still local. Defaults to this session\'s working directory, then the default repository configured in Settings; pass repo to publish somewhere else. A secret-scan hit blocks the push unless force is true.',
+    parameters: {
+      repo: {
+        type: 'string',
+        description: 'Absolute path of the repository to publish. Omit to use the session\'s working directory, then the repository configured in Settings.',
+      },
+      force: {
+        type: 'boolean',
+        description: 'Publish even when the secret scan finds tracked credentials. Only after a human has looked at the findings.',
+      },
+    },
+    output: toolOutput(),
+    async execute(args, exec) {
+      const settings = githubSettings()
+      const explicit = typeof args.repo === 'string' ? args.repo.trim() : ''
+      const resolved = resolvePushCwd({
+        explicit,
+        sessionDirectory: sessionDirectory(ctx, exec),
+        configured: settings.repoPath || '',
+      })
+      if (!resolved.cwd) {
+        const failed = {
+          ok: false,
+          failure: resolved.error,
+          path: explicit,
+          proxy: null,
+          secrets: null,
+          push: null,
+          repo: null,
+          forced: false,
+        }
+        return { ...failed, source: resolved.source, text: pushReportText(failed, { path: explicit }) }
+      }
+      const flow = await pushFlow({ cwd: resolved.cwd, settings, force: args.force === true })
+      const base = pushReportText(flow, { path: resolved.cwd })
+      const text = resolved.source === 'setting'
+        ? `No checkout in the session directory, so this used the default repository configured in Settings. ${base}`
+        : base
+      return { ...flow, source: resolved.source, text }
+    },
+  })), 'compression-tiers: github push tool')
+
   ctx.inject(['webServer', 'connection'], (child) => {
     child.effect(() => child.webServer.register({
       kind: 'exact',
@@ -503,21 +553,8 @@ export function apply(ctx) {
               patch.proxy = value
             }
             if (body.repos !== undefined) {
-              if (!Array.isArray(body.repos)) {
-                sendJson(res, 400, { error: 'repos must be an array of repository paths' })
-                return
-              }
-              const repos = []
-              for (const entry of body.repos) {
-                const value = typeof entry === 'string' ? entry.trim() : ''
-                if (!value) continue
-                if (!isAbsolute(value) || !existsSync(value) || !statSync(value).isDirectory()) {
-                  sendJson(res, 400, { error: `repository path must be an existing absolute directory: ${value}` })
-                  return
-                }
-                repos.push(value)
-              }
-              patch.repos = repos
+              sendJson(res, 400, { error: 'repos is no longer supported: push one repository at a time, or use the github_push tool' })
+              return
             }
             writeSettings(homeDir(), { settings: { github: { ...github, ...patch } } })
             sendJson(res, 200, { ok: true, ...statePayload(ctx) })
@@ -527,32 +564,27 @@ export function apply(ctx) {
             const settings = githubSettings()
             const cwd = repoFromRequest(body.repo)
             if (!cwd) {
-              sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+              sendJson(res, 400, { error: 'repository path must be an existing absolute directory' })
               return
             }
-            const detected = await detectProxy({ cwd, override: settings.proxy })
-            // A tracked token is worth a stop before it leaves the machine; a
-            // human can push anyway once they have looked at the findings.
-            const secrets = await scanSecrets(cwd)
-            if (!secrets.ok && body.force !== true) {
-              sendJson(res, 200, {
-                ok: false,
-                push: { ok: false, failure: 'secret-scan', findings: secrets.findings },
-                secrets,
-                proxy: detected.proxy,
-              })
-              return
-            }
-            const push = await pushRepo({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
-            const repo = await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
-            sendJson(res, 200, { ok: push.ok, proxy: detected.proxy, push, repo, secrets, forced: body.force === true })
+            const flow = await pushFlow({ cwd, settings, force: body.force === true })
+            sendJson(res, 200, {
+              ok: flow.ok,
+              flow,
+              proxy: flow.proxy,
+              push: flow.push,
+              repo: flow.repo,
+              secrets: flow.secrets,
+              forced: flow.forced,
+              text: pushReportText(flow, { path: cwd }),
+            })
             return
           }
           if (action === 'create') {
             const settings = githubSettings()
             const cwd = repoFromRequest(body.repo)
             if (!cwd) {
-              sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+              sendJson(res, 400, { error: 'repository path must be an existing absolute directory' })
               return
             }
             const detected = await detectProxy({ cwd, override: settings.proxy })
@@ -574,7 +606,7 @@ export function apply(ctx) {
             const settings = githubSettings()
             const cwd = repoFromRequest(body.repo)
             if (!cwd) {
-              sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+              sendJson(res, 400, { error: 'repository path must be an existing absolute directory' })
               return
             }
             const detected = await detectProxy({ cwd, override: settings.proxy })
@@ -638,14 +670,14 @@ export function apply(ctx) {
         const settings = githubSettings()
         const cwd = repoFromRequest(queryParam(req, 'repo'))
         if (!cwd) {
-          sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+          sendJson(res, 400, { error: 'repository path must be an existing absolute directory' })
           return
         }
         const detected = await detectProxy({ cwd, override: settings.proxy })
         sendJson(res, 200, {
           ok: true,
-          // The panel reads this on mount: keep the remote lookup short so a
-          // flaky GitHub never leaves the section blank for long.
+          // The settings page reads this on mount: keep the remote lookup short
+          // so a flaky GitHub never leaves the section blank for long.
           repo: await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy, timeoutMs: 8000 }),
           proxy: detected.proxy,
           settings,
@@ -654,33 +686,6 @@ export function apply(ctx) {
         sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
       }
     }, 'github repo route')
-
-    // Every configured repository, each with its own state: the sidebar panel
-    // pushes them one at a time, so two agents never overwrite a shared path.
-    register('/compression-tiers/api/github/repos', async (req, res) => {
-      if (guard(child, req, res)) return
-      if (req.method !== 'GET') {
-        sendJson(res, 405, { error: 'GET' })
-        return
-      }
-      try {
-        const settings = githubSettings()
-        const detected = await detectProxy({ cwd: repoPath(), override: settings.proxy })
-        const repos = repoList(settings)
-        const items = await Promise.all(repos.map(async (path) => ({
-          path,
-          repo: await repoSnapshot({ cwd: path, remote: settings.remote, branch: settings.branch, proxy: detected.proxy, timeoutMs: 5000 }),
-        })))
-        sendJson(res, 200, {
-          ok: true,
-          repos: items,
-          proxy: detected.proxy,
-          settings: { repoPath: settings.repoPath, remote: settings.remote, branch: settings.branch, proxy: settings.proxy },
-        })
-      } catch (error) {
-        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
-      }
-    }, 'github repos route')
   })
 
   // Presets mount after this plugin in the official composition and live in

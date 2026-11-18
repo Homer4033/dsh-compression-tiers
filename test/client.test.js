@@ -150,15 +150,10 @@ test('the client factory registers a localized settings section', () => {
   }
   module.factory(() => fakeReact(null)).apply(ctx)
 
-  assert.deepEqual(registrations.map((item) => item.options.name).sort(), ['main', 'settings.section', 'sidebar.panellist'])
+  assert.deepEqual(registrations.map((item) => item.options.name).sort(), ['settings.section'])
   const section = registrations.find((item) => item.options.name === 'settings.section')
   assert.equal(section.options.id, 'compression-tiers')
   assert.equal(section.options.label(), 'compressionTiers:sectionLabel')
-  const panel = registrations.find((item) => item.options.name === 'sidebar.panellist')
-  assert.equal(panel.options.id, 'compression-repos')
-  assert.equal(panel.options.label(), 'compressionTiers:reposLabel')
-  const main = registrations.find((item) => item.options.name === 'main')
-  assert.equal(main.options.key, 'compression-repos')
   assert.equal(dictionaries.namespace, 'compressionTiers')
   assert.deepEqual(Object.keys(dictionaries.dicts).sort(), ['en', 'zh'])
   for (const locale of ['zh', 'en']) {
@@ -172,6 +167,9 @@ test('the client factory registers a localized settings section', () => {
     assert.ok(keys.includes('ghTitle'))
     assert.ok(keys.includes('ghDownload'))
     assert.ok(keys.includes('ghLogin'))
+    assert.ok(keys.includes('ghToolNote'))
+    // The sidebar repository panel is gone; its copy must not linger.
+    assert.equal(keys.filter((key) => key.startsWith('repos')).length, 0)
   }
 })
 
