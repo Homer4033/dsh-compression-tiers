@@ -79,21 +79,25 @@ test('atomic text writes create missing directories and leave no temp file', () 
   }
 })
 
-test('github settings keep the default repository and drop the retired repository list', () => {
+test('github settings keep the remote and drop the retired repository fields', () => {
   const home = tempHome()
   try {
     const empty = readSettings(home)
-    assert.equal(empty.settings.github.repoPath, '')
     assert.equal(empty.settings.github.remote, 'origin')
+    assert.equal('repoPath' in empty.settings.github, false)
+    assert.equal('repos' in empty.settings.github, false)
 
     writeSettings(home, {
-      settings: { github: { repoPath: ' D:/repo ', repos: ['D:/a', 'D:/b'] } },
+      settings: { github: { repoPath: 'D:/repo', repos: ['D:/a'], remote: 'upstream', branch: 'main' } },
     })
     const state = readSettings(home)
-    assert.equal(state.settings.github.repoPath, 'D:/repo')
+    assert.equal(state.settings.github.remote, 'upstream')
+    assert.equal(state.settings.github.branch, 'main')
     assert.equal('repos' in state.settings.github, false)
-    // The field is also gone from the file on disk, not only in memory.
-    assert.equal(readFileSync(settingsPaths(home).settings, 'utf8').includes('"repos"'), false)
+    // The retired fields are also gone from the file on disk, not only in memory.
+    const persisted = readFileSync(settingsPaths(home).settings, 'utf8')
+    assert.equal(persisted.includes('"repos"'), false)
+    assert.equal(persisted.includes('"repoPath"'), false)
   } finally {
     rmSync(home, { recursive: true, force: true })
   }

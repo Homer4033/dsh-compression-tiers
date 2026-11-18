@@ -29,25 +29,25 @@ test('isRepoDir accepts only existing absolute directories', () => {
   }
 })
 
-test('resolvePushCwd prefers the explicit path, then the session directory, then the setting', () => {
+test('resolvePushCwd prefers the explicit path over the session directory', () => {
   const root = tempDir()
   try {
     const session = repo(join(root, 'session'))
-    const configured = repo(join(root, 'configured'))
     const explicit = repo(join(root, 'explicit'))
 
     assert.deepEqual(
-      resolvePushCwd({ explicit, sessionDirectory: session, configured }),
+      resolvePushCwd({ explicit, sessionDirectory: session }),
       { cwd: explicit, source: 'explicit', error: null },
     )
     assert.deepEqual(
-      resolvePushCwd({ sessionDirectory: session, configured }),
+      resolvePushCwd({ sessionDirectory: session }),
       { cwd: session, source: 'session', error: null },
     )
-    // A session directory that is not a checkout does not win over the setting.
+    // A session directory that is not a checkout is not a repository, and
+    // there is no configured fallback to hide that.
     assert.deepEqual(
-      resolvePushCwd({ sessionDirectory: join(root, 'plain'), configured }),
-      { cwd: configured, source: 'setting', error: null },
+      resolvePushCwd({ sessionDirectory: join(root, 'plain') }),
+      { cwd: null, source: 'none', error: 'no-repository' },
     )
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -60,7 +60,6 @@ test('resolvePushCwd reports why there is nothing to push', () => {
     assert.deepEqual(resolvePushCwd({}), { cwd: null, source: 'none', error: 'no-repository' })
     assert.equal(resolvePushCwd({ explicit: 'relative' }).error, 'repository-path-invalid')
     assert.equal(resolvePushCwd({ explicit: join(root, 'gone') }).error, 'repository-path-invalid')
-    assert.equal(resolvePushCwd({ configured: join(root, 'gone') }).error, 'repository-path-invalid')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

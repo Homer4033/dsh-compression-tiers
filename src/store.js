@@ -15,9 +15,9 @@ import { normalizeRoutes } from './routes.js'
 
 export function defaultGithubSettings() {
   return {
-    // Empty means "use this plugin's own checkout" on the settings page.
-    repoPath: '',
+    // Which remote the publishing tool pushes to; hand-editable in settings.
     remote: 'origin',
+    // Empty means "the branch HEAD is on".
     branch: '',
     // Empty means "detect": git's http.proxy, then the system proxy.
     proxy: '',
@@ -45,9 +45,9 @@ export function normalizeSettings(value) {
   next.lastCompact = next.lastCompact && typeof next.lastCompact === 'object' ? next.lastCompact : null
   const github = value && typeof value === 'object' && value.github && typeof value.github === 'object' ? value.github : {}
   next.github = {
-    repoPath: text(github.repoPath, base.github.repoPath),
-    // `repos` from 1.4.x is dropped on the next write: one default repository
-    // plus the per-session working directory replaced the panel list.
+    // `repos` (1.4.x) and `repoPath` (<= 1.5.0) are dropped on the next write:
+    // publishing belongs to the github_push tool, which uses the session's own
+    // working directory instead of a configured default repository.
     remote: text(github.remote, base.github.remote),
     branch: text(github.branch, base.github.branch),
     proxy: text(github.proxy, base.github.proxy),

@@ -39,14 +39,13 @@ export function hasGitEntry(path) {
  * Which directory a push targets, in order:
  *
  * 1. an explicit absolute path the caller passed;
- * 2. the session's own working directory, when it is a checkout;
- * 3. the repository configured in the settings page (`github.repoPath`).
+ * 2. the session's own working directory, when it is a checkout.
  *
- * The plugin's own checkout is deliberately not a candidate: a tool that
- * published this package whenever a session had no repository would be a
- * surprise, not a default.
+ * There is no configured fallback: a plugin that published some default
+ * repository whenever a session had no checkout would be a surprise, not a
+ * default. The plugin's own checkout is never a candidate.
  */
-export function resolvePushCwd({ explicit = '', sessionDirectory = '', configured = '', git = hasGitEntry } = {}) {
+export function resolvePushCwd({ explicit = '', sessionDirectory = '', git = hasGitEntry } = {}) {
   const wanted = typeof explicit === 'string' ? explicit.trim() : ''
   if (wanted) {
     if (!isRepoDir(wanted)) return { cwd: null, source: 'explicit', error: 'repository-path-invalid' }
@@ -54,11 +53,6 @@ export function resolvePushCwd({ explicit = '', sessionDirectory = '', configure
   }
   const session = typeof sessionDirectory === 'string' ? sessionDirectory.trim() : ''
   if (session && git(session)) return { cwd: session, source: 'session', error: null }
-  const fallback = typeof configured === 'string' ? configured.trim() : ''
-  if (fallback) {
-    if (!isRepoDir(fallback)) return { cwd: null, source: 'setting', error: 'repository-path-invalid' }
-    return { cwd: fallback, source: 'setting', error: null }
-  }
   return { cwd: null, source: 'none', error: 'no-repository' }
 }
 

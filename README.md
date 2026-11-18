@@ -56,7 +56,7 @@
 
 - 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.5.0`
 - GitHub Release 页面按 tag 生成（[releases](https://github.com/Homer4033/dsh-compression-tiers/releases)），更新日志见 [CHANGELOG.md](CHANGELOG.md)
-- CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与设置页推送前的检查同源
+- CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与 github_push 推送前的检查同源
 - 本地自查：`npm run check:secrets`
 
 ## 使用
@@ -94,28 +94,27 @@
 - **下载**：内置固定版本 `gh 2.76.2`（Windows / Linux，x64 / arm64），从 `cli/cli` 官方 release 下载；支持 HTTP Range 断点续传、10 分钟超时、解压后先跑 `gh --version` 探测暂存副本，再原子替换，失败自动回滚旧二进制。
 - **登录**：调 `gh auth login --web` 走设备码流程：页面显示一次性验证码（可复制）、打开授权页、取消；`gh` 子进程在后台轮询，完成后自动刷新成「已登录：账号」。凭据存在 gh 自己的存储里，不写 DSH 数据目录。
 
-接口：`GET/POST /compression-tiers/api/github`（状态，动作 `download` / `login` / `cancel` / `configure` / `push` / `create` / `view`）与 `GET /compression-tiers/api/github/auth`（`gh auth status --json hosts` + `gh --version`），都走同一套同源校验。
+接口：`GET/POST /compression-tiers/api/github`（状态，动作 `download` / `login` / `cancel`）与 `GET /compression-tiers/api/github/auth`（`gh auth status --json hosts` + `gh --version`），都走同一套同源校验。
 
 **登录状态带 scopes**：`gh auth status --json hosts` 可用时读 JSON，老版本回落到文本解析；缺 `repo` scope 时面板直接提示——私有仓库推送会 403，不用等到失败才发现。
 
-### 网络体检与推送
+### 网络体检与发布
 
 只判断「gh 装了没有、登没登录」还不够：真正耗时间的是下一层——`http.proxy` 指着一个没人监听的端口、`github.com` 解析到不是 GitHub 的地址、或者 `git push` 卡住不返回。面板因此多了三块：
 
 - **网络体检**（`GET /compression-tiers/api/github/network`）：探 DNS、直连 443、对 `https://github.com/` 的 HEAD 请求、代理端口，给出 `direct` / `proxy` / `proxy-dead` / `blocked` 四种结论。只看 TCP 不够——被污染的解析结果照样能握手成功，只有 HTTPS 失败才说明此路不通；代理按「显式设置 → git `http.proxy` → 系统代理」的顺序确定，并在面板标出用的是哪一层。DNS 落在已知 GitHub 网段之外会单独提示（只是提示，不当失败）。
-- **仓库状态**（`GET /compression-tiers/api/github/repo`）：仓库路径（默认本插件目录，可改并持久化到设置）、当前分支、本地/远端 HEAD、待推提交、未提交改动；远端用 `git ls-remote` 现查，失败只标记不抛错。
-- **推送**（`POST` 动作 `push`）：`git push` 带 60 秒硬超时，超时用 `taskkill /T /F`（POSIX 下杀进程组）收掉整棵进程树，并设 `GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never` 防止卡在交互式认证；失败按 DNS / 网络代理 / 认证 / 非快进 / 仓库不存在分类，同时返回仍未推送的提交列表。代理可用时自动注入 `-c http.proxy=…`，不写进 git 全局配置。设置页与 `github_push` 工具共用这一段流程（`src/push-flow.js`），安全规则不会两边不一致。
+- **推送**（`github_push` 工具）：`git push` 带 60 秒硬超时，超时用 `taskkill /T /F`（POSIX 下杀进程组）收掉整棵进程树，并设 `GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never` 防止卡在交互式认证；失败按 DNS / 网络代理 / 认证 / 非快进 / 仓库不存在分类，同时返回仍未推送的提交列表。代理可用时自动注入 `-c http.proxy=…`，不写进 git 全局配置。流程在 `src/push-flow.js`，设置页只做体检，不再有推送入口。
 
-**建仓**（动作 `create`）默认私有，必须 `confirm: true` 且仓库名合法才会执行 `gh repo create --source … --remote origin --push`；只在仓库还没有远端时出现在面板上，并且要在按钮上再点一次确认。
+**建仓**：仓库创建不再是面板按钮。需要建仓时用 `gh repo create --source . --remote origin --push`，或用 git 手动加远端；`createRepo` 的校验（默认私有、二次确认、仓库名规则）仍在 `src/publish.js` 里保留给以后接回 UI。
 
 ### 智能体发布：`github_push`
 
 1.4.x 的左侧栏「仓库」面板已经删除：官方「变更请求与工作树」bundle 已经在管仓库与工作树的 UI，再造一套面板只是重复。真正缺的那一步——「这一段工作该发出去了」——只有智能体自己知道，所以发布能力改成工具 `github_push`：
 
-- **默认目录**：显式传 `repo` > 本会话的工作目录（`workingDirectory`，且必须是 git 检出）> 设置页里的「默认仓库」。插件自己的检出目录不在候选里，不会因为没配路径就把插件仓库推出去。
+- **目录**：显式传 `repo`，否则用本会话的工作目录（`workingDirectory`，且必须是 git 检出）。没有配置项、没有兜底，插件自己的检出目录也不在候选里。
 - **流程**：网络体检（与设置页同源）→ 密钥扫描 → `git push`（60 秒硬超时、进程树清理）→ 失败分类与待推列表；命中的密钥会直接阻止推送，人工看过后再传 `force: true`。
 - **结果**：返回 `ok` / `failure` / `path` / `proxy` / `push` / `repo` / `secrets`，并附一段可直接引用的人类可读 `text`。
-- **设置页**：「默认仓库」与推送/建仓按钮仍在，负责把一个具体仓库（默认是本插件目录）推出去；面板删除后它不再是多仓库入口。
+- **设置页**：GitHub 区只保留 gh 的安装/登录与网络体检——没有仓库路径、没有推送按钮。发布是工具的事，人工要推就自己跑 git。
 
 > 下载只校验大小与 `gh --version`，没有对压缩包固定 SHA-256；钉住的是官方 release URL。
 
@@ -179,7 +178,7 @@
 - **登录凭据位置**：`gh auth login` 把凭据写进 gh 自己的存储（Windows 上是 `%APPDATA%\GitHub CLI`），不写 DSH 数据目录，也不会进转移包。
 - **浏览器刷新**：切换档位对引擎立即生效；设置页自身的状态通过接口刷新，个别情况下需要刷新页面重新读取。
 - **中文/英文**：设置页与插件详情按 DSH 语言环境显示；智能体面向的提示与工具描述为英文。
-- **1.4.x 的侧栏面板已删除**：升级到 1.5.0 后左侧栏不再有「仓库」入口，`settings.json` 里的 `github.repos` 会在下一次写入时被清掉。需要推多个仓库时，让智能体在对应工作区里调用 `github_push`（默认推该会话的工作目录），或分次在设置页改「默认仓库」。
+- **仓库 UI 全部下线**：1.4.x 的侧栏面板在 1.5.0 删除，1.5.1 又拿掉了设置页里的默认仓库与推送/建仓/查看；`settings.json` 里的 `github.repos`、`github.repoPath` 会在下一次写入时被清掉。推多个仓库就让智能体在各自工作区里调用 `github_push`。
 
 ## 为什么是这五档
 
@@ -207,7 +206,7 @@ src/manual-compact.js 主动压缩队列（compactNow + follow-up）
 src/store.js          状态文件读写（JSON 与原子文本写入）
 src/rules.js          全局规则文件：路径、读取、校验、原子写入、提示摘要
 src/gh.js             GitHub CLI：托管下载（断点续传/回滚）、PATH 检测、设备码登录
-src/publish.js        网络体检、仓库快照、带超时的 push、建仓、密钥扫描
+src/publish.js        网络体检、仓库快照、带超时的 push、建仓校验、密钥扫描
 src/push-flow.js      发布流程：目录选择 → 代理 → 密钥扫描 → push → 报告（设置页与 github_push 共用）
 src/routes.js         按路由覆盖解析
 src/http.js           设置路由的同源/认证与 JSON 辅助

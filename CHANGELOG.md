@@ -1,7 +1,13 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.5.0`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.5.1`。
 
+## 1.5.1 — 2026-11-19
+
+- **设置页不再有仓库**：删掉「默认仓库」输入框、仓库状态行、推送 / 建仓 / 查看按钮与仓库路径的保存动作。GitHub 这一栏只剩 `gh` 的安装、登录与网络体检；发布只走 `github_push` 工具。
+- 接口收敛：`/api/github` 只保留 `download` / `login` / `cancel`，`configure` / `push` / `create` / `view` 下线；`GET /api/github/repo` 删除；网络体检固定在本插件检出目录上跑（只为读 git 的 `http.proxy`）。
+- 设置里删掉 `github.repoPath`（升级后下一次写入即清掉），`resolveRepoPath` 一并移除；`github_push` 的目录选择变成「显式 `path` → 本会话工作目录」，不再有配置兜底。
+- 测试同步：`test/push-flow.test.js` 覆盖「显式 → 会话、无兜底」，`test/store.test.js` 断言 `repoPath` / `repos` 从内存与磁盘上一起消失；共 92 条。
 ## 1.5.0 — 2026-11-19
 
 - **删掉左侧栏「仓库」面板**：官方「变更请求与工作树」bundle 已经在管仓库与工作树 UI，自建面板与它重复。移除 `sidebar.panellist` / `main` 两个注册、面板组件与图标、`repos*` 文案、`GET /api/github/repos` 路由和 `configure` 的 `repos` 字段（现在返回 400 说明已下线）。

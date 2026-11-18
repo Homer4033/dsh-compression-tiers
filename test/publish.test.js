@@ -17,7 +17,6 @@ import {
   proxyEnv,
   pushRepo,
   repoSnapshot,
-  resolveRepoPath,
   scanSecrets,
 } from '../src/publish.js'
 
@@ -358,15 +357,6 @@ test('repoSnapshot falls back to the current branch when none is configured', as
   } finally {
     rmSync(cwd, { recursive: true, force: true })
   }
-})
-
-test('the repository path falls back to the plugin checkout', () => {
-  const root = 'C:/plugins/compression'
-  const absolute = process.platform === 'win32' ? 'D:/DSH插件/压缩上下文' : '/opt/compression'
-  assert.equal(resolveRepoPath({ repoPath: '' }, root), root)
-  assert.equal(resolveRepoPath({ repoPath: absolute }, root), absolute)
-  assert.equal(resolveRepoPath({ repoPath: 'sub/repo' }, root), join(root, 'sub/repo'))
-  assert.equal(resolveRepoPath(null, root), root)
 })
 
 test('scanSecrets blocks credential files and token-shaped lines', async () => {

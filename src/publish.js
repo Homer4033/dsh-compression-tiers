@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { connect as netConnect } from 'node:net'
 import { promises as dns } from 'node:dns'
-import { extname, isAbsolute, join } from 'node:path'
+import { extname, join } from 'node:path'
 
 /**
  * GitHub publishing helpers: is the network actually usable, and can a commit
@@ -588,11 +588,4 @@ export async function scanSecrets(cwd, {
     skipped,
     files: files.length,
   }
-}
-
-/** The default repository: a configured path, else this package's checkout. */
-export function resolveRepoPath(settingsGithub, pluginRoot) {
-  const configured = settingsGithub && typeof settingsGithub.repoPath === 'string' ? settingsGithub.repoPath.trim() : ''
-  if (configured) return isAbsolute(configured) ? configured : join(pluginRoot, configured)
-  return pluginRoot
 }
