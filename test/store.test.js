@@ -79,6 +79,23 @@ test('atomic text writes create missing directories and leave no temp file', () 
   }
 })
 
+test('github repositories are normalized and de-duplicated', () => {
+  const home = tempHome()
+  try {
+    const empty = readSettings(home)
+    assert.deepEqual(empty.settings.github.repos, [])
+    assert.equal(empty.settings.github.remote, 'origin')
+
+    writeSettings(home, {
+      settings: { github: { repos: [' D:/a ', 'D:/b', { path: 'D:/a' }, '', 42, 'D:/b'] } },
+    })
+    const state = readSettings(home)
+    assert.deepEqual(state.settings.github.repos, ['D:/a', 'D:/b'])
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
 test('writeJson is a thin atomic text write', () => {
   const home = tempHome()
   try {

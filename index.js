@@ -4,7 +4,7 @@ import { COMPRESSION_LEVELS, compressionSpec, levelForPolicy, parseLevel } from 
 import { presetCompactionEntries, presetEnginePolicies, syncPresetCompaction } from './src/presets.js'
 import { attachContextMeter, compactionWindowNote, contextReportText, readContextWindow, readMeter } from './src/context-meter.js'
 import { attachCompactQueue, COMPACT_TOOL_NAME, resolveCompaction } from './src/manual-compact.js'
-import { readSettings, writeSettings } from './src/store.js'
+import { normalizeRepoList, readSettings, writeSettings } from './src/store.js'
 import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/rules.js'
 import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
 import {
@@ -48,6 +48,38 @@ function githubSettings() {
 
 function repoPath() {
   return resolveRepoPath(githubSettings(), PLUGIN_ROOT)
+}
+
+/** Read one query parameter; the route table matches on the path only. */
+function queryParam(req, name) {
+  try {
+    return new URL(req.url || '/', 'http://localhost').searchParams.get(name)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Every repository the panel may operate on. The configured list comes first;
+ * an empty list falls back to the plugin's own checkout so a fresh install is
+ * useful without configuration. Only these paths are accepted from requests.
+ */
+function repoList(settings = githubSettings()) {
+  const configured = normalizeRepoList(settings.repos)
+  if (configured.length > 0) return configured
+  return [resolveRepoPath(settings, PLUGIN_ROOT)]
+}
+
+function samePath(left, right) {
+  const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value)
+  return normalize(left) === normalize(right)
+}
+
+/** Resolve an optional `repo` argument against the allowed list. */
+function repoFromRequest(value) {
+  const list = repoList()
+  if (typeof value !== 'string' || !value.trim()) return list[0] || null
+  return list.find((path) => samePath(path, value.trim())) || null
 }
 
 /** `https://github.com/owner/name.git` → `owner/name`. */
@@ -180,7 +212,12 @@ function statePayload(ctx) {
     routeLines: formatRouteLines(state.settings.modelRoutes),
     lastCompact: state.settings.lastCompact,
     paths: { settings: state.paths.settings },
-    github: { ...state.settings.github, repoPath: repoPath(), defaultRepoPath: PLUGIN_ROOT },
+    github: {
+      ...state.settings.github,
+      repoPath: repoPath(),
+      repos: repoList(state.settings),
+      defaultRepoPath: PLUGIN_ROOT,
+    },
     ...engineSummary(ctx),
   }
 }
@@ -461,13 +498,34 @@ export function apply(ctx) {
               }
               patch.proxy = value
             }
+            if (body.repos !== undefined) {
+              if (!Array.isArray(body.repos)) {
+                sendJson(res, 400, { error: 'repos must be an array of repository paths' })
+                return
+              }
+              const repos = []
+              for (const entry of body.repos) {
+                const value = typeof entry === 'string' ? entry.trim() : ''
+                if (!value) continue
+                if (!isAbsolute(value) || !existsSync(value) || !statSync(value).isDirectory()) {
+                  sendJson(res, 400, { error: `repository path must be an existing absolute directory: ${value}` })
+                  return
+                }
+                repos.push(value)
+              }
+              patch.repos = repos
+            }
             writeSettings(homeDir(), { settings: { github: { ...github, ...patch } } })
             sendJson(res, 200, { ok: true, ...statePayload(ctx) })
             return
           }
           if (action === 'push') {
             const settings = githubSettings()
-            const cwd = repoPath()
+            const cwd = repoFromRequest(body.repo)
+            if (!cwd) {
+              sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+              return
+            }
             const detected = await detectProxy({ cwd, override: settings.proxy })
             // A tracked token is worth a stop before it leaves the machine; a
             // human can push anyway once they have looked at the findings.
@@ -488,7 +546,11 @@ export function apply(ctx) {
           }
           if (action === 'create') {
             const settings = githubSettings()
-            const cwd = repoPath()
+            const cwd = repoFromRequest(body.repo)
+            if (!cwd) {
+              sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+              return
+            }
             const detected = await detectProxy({ cwd, override: settings.proxy })
             const created = await createRepo({
               gh: resolveGh(homeDir()),
@@ -506,7 +568,11 @@ export function apply(ctx) {
           }
           if (action === 'view') {
             const settings = githubSettings()
-            const cwd = repoPath()
+            const cwd = repoFromRequest(body.repo)
+            if (!cwd) {
+              sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+              return
+            }
             const detected = await detectProxy({ cwd, override: settings.proxy })
             const snapshot = await repoSnapshot({ cwd, remote: settings.remote, branch: settings.branch, proxy: detected.proxy })
             const nameWithOwner = typeof body.nameWithOwner === 'string' && body.nameWithOwner.trim()
@@ -566,7 +632,11 @@ export function apply(ctx) {
       }
       try {
         const settings = githubSettings()
-        const cwd = repoPath()
+        const cwd = repoFromRequest(queryParam(req, 'repo'))
+        if (!cwd) {
+          sendJson(res, 400, { error: 'unknown repository: pick one from the configured list' })
+          return
+        }
         const detected = await detectProxy({ cwd, override: settings.proxy })
         sendJson(res, 200, {
           ok: true,
@@ -580,6 +650,33 @@ export function apply(ctx) {
         sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
       }
     }, 'github repo route')
+
+    // Every configured repository, each with its own state: the sidebar panel
+    // pushes them one at a time, so two agents never overwrite a shared path.
+    register('/compression-tiers/api/github/repos', async (req, res) => {
+      if (guard(child, req, res)) return
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'GET' })
+        return
+      }
+      try {
+        const settings = githubSettings()
+        const detected = await detectProxy({ cwd: repoPath(), override: settings.proxy })
+        const repos = repoList(settings)
+        const items = await Promise.all(repos.map(async (path) => ({
+          path,
+          repo: await repoSnapshot({ cwd: path, remote: settings.remote, branch: settings.branch, proxy: detected.proxy, timeoutMs: 5000 }),
+        })))
+        sendJson(res, 200, {
+          ok: true,
+          repos: items,
+          proxy: detected.proxy,
+          settings: { repoPath: settings.repoPath, remote: settings.remote, branch: settings.branch, proxy: settings.proxy },
+        })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'github repos route')
   })
 
   // Presets mount after this plugin in the official composition and live in

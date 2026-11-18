@@ -17,6 +17,9 @@ export function defaultGithubSettings() {
   return {
     // Empty means "use this plugin's own checkout"; the panel shows the result.
     repoPath: '',
+    // Extra repositories managed from the sidebar panel: absolute paths only.
+    // The default repository above is never repeated here.
+    repos: [],
     remote: 'origin',
     branch: '',
     // Empty means "detect": git's http.proxy, then the system proxy.
@@ -37,6 +40,23 @@ function text(value, fallback) {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
+/** Absolute paths, trimmed and de-duplicated; the order is the panel order. */
+export function normalizeRepoList(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const repos = []
+  for (const entry of value) {
+    const raw = typeof entry === 'string' ? entry : (entry && typeof entry.path === 'string' ? entry.path : '')
+    const path = raw.trim()
+    if (!path) continue
+    const key = process.platform === 'win32' ? path.toLowerCase() : path
+    if (seen.has(key)) continue
+    seen.add(key)
+    repos.push(path)
+  }
+  return repos
+}
+
 export function normalizeSettings(value) {
   const base = defaultSettings()
   const next = { ...base, ...(value && typeof value === 'object' ? value : {}) }
@@ -46,6 +66,7 @@ export function normalizeSettings(value) {
   const github = value && typeof value === 'object' && value.github && typeof value.github === 'object' ? value.github : {}
   next.github = {
     repoPath: text(github.repoPath, base.github.repoPath),
+    repos: normalizeRepoList(github.repos),
     remote: text(github.remote, base.github.remote),
     branch: text(github.branch, base.github.branch),
     proxy: text(github.proxy, base.github.proxy),

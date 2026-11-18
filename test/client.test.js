@@ -86,10 +86,11 @@ function render(states) {
   const registrations = []
   const dictionaries = {}
   module.factory(() => fakeReact(states)).apply(sectionContext(registrations, dictionaries))
-  assert.equal(registrations.length, 1)
-  const element = registrations[0].component()
+  const section = registrations.find((item) => item.options.name === 'settings.section')
+  assert.ok(section, 'the settings section is registered')
+  const element = section.component()
   const tree = element.type(element.props)
-  return { nodes: collect(tree), dictionaries, options: registrations[0].options }
+  return { nodes: collect(tree), dictionaries, options: section.options }
 }
 
 const settingsState = {
@@ -149,10 +150,15 @@ test('the client factory registers a localized settings section', () => {
   }
   module.factory(() => fakeReact(null)).apply(ctx)
 
-  assert.equal(registrations.length, 1)
-  assert.equal(registrations[0].options.name, 'settings.section')
-  assert.equal(registrations[0].options.id, 'compression-tiers')
-  assert.equal(registrations[0].options.label(), 'compressionTiers:sectionLabel')
+  assert.deepEqual(registrations.map((item) => item.options.name).sort(), ['main', 'settings.section', 'sidebar.panellist'])
+  const section = registrations.find((item) => item.options.name === 'settings.section')
+  assert.equal(section.options.id, 'compression-tiers')
+  assert.equal(section.options.label(), 'compressionTiers:sectionLabel')
+  const panel = registrations.find((item) => item.options.name === 'sidebar.panellist')
+  assert.equal(panel.options.id, 'compression-repos')
+  assert.equal(panel.options.label(), 'compressionTiers:reposLabel')
+  const main = registrations.find((item) => item.options.name === 'main')
+  assert.equal(main.options.key, 'compression-repos')
   assert.equal(dictionaries.namespace, 'compressionTiers')
   assert.deepEqual(Object.keys(dictionaries.dicts).sort(), ['en', 'zh'])
   for (const locale of ['zh', 'en']) {
