@@ -1,6 +1,6 @@
 {
   "name": "dsh-compression-tiers",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": false,
   "type": "module",
   "description": "Five-tier context compression policy for official DeepSeek Harness plus a global rules editor and GitHub CLI management: settings page, agent tools, live occupancy meter, proactive compaction, $DSH_HOME/AGENTS.md, and managed gh with device-code login.",

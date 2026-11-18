@@ -60,14 +60,16 @@ function queryParam(req, name) {
 }
 
 /**
- * Every repository the panel may operate on. The configured list comes first;
- * an empty list falls back to the plugin's own checkout so a fresh install is
- * useful without configuration. Only these paths are accepted from requests.
+ * Repositories managed from the sidebar panel: exactly what the user added,
+ * nothing implicit. An empty list shows an empty panel; the fallback default
+ * below exists only for the settings page and single-repository actions.
  */
 function repoList(settings = githubSettings()) {
-  const configured = normalizeRepoList(settings.repos)
-  if (configured.length > 0) return configured
-  return [resolveRepoPath(settings, PLUGIN_ROOT)]
+  return normalizeRepoList(settings.repos)
+}
+
+function defaultRepoPath(settings = githubSettings()) {
+  return resolveRepoPath(settings, PLUGIN_ROOT)
 }
 
 function samePath(left, right) {
@@ -75,11 +77,13 @@ function samePath(left, right) {
   return normalize(left) === normalize(right)
 }
 
-/** Resolve an optional `repo` argument against the allowed list. */
+/** Resolve an optional `repo` argument; `undefined` means the default repository. */
 function repoFromRequest(value) {
-  const list = repoList()
-  if (typeof value !== 'string' || !value.trim()) return list[0] || null
-  return list.find((path) => samePath(path, value.trim())) || null
+  const wanted = typeof value === 'string' ? value.trim() : ''
+  if (!wanted) return defaultRepoPath()
+  const listed = repoList().find((path) => samePath(path, wanted))
+  if (listed) return listed
+  return samePath(defaultRepoPath(), wanted) ? wanted : null
 }
 
 /** `https://github.com/owner/name.git` → `owner/name`. */

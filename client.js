@@ -806,7 +806,11 @@ window.__ModuleLoader__.load({
         if (repoBusy) return
         setRepoBusy('push')
         setRepoMessage(t('ghPushing'))
-        githubAction({ action: 'push', force: force === true })
+        githubAction({
+          action: 'push',
+          force: force === true,
+          repo: state && state.github ? state.github.repoPath : undefined,
+        })
           .then(function (body) {
             if (!mounted.current) return
             if (body && body.push && body.push.failure === 'secret-scan') {
