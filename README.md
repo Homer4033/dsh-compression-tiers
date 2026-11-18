@@ -54,6 +54,7 @@
 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag，变更写在 [CHANGELOG.md](CHANGELOG.md)。
 
 - 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.3.1`
+- GitHub Release 页面按 tag 生成（[releases](https://github.com/Homer4033/dsh-compression-tiers/releases)），更新日志见 [CHANGELOG.md](CHANGELOG.md)
 - CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与设置页推送前的检查同源
 - 本地自查：`npm run check:secrets`
 
