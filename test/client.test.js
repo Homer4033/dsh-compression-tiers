@@ -216,8 +216,11 @@ test('the client factory registers a localized settings section', () => {
     for (const key of [
       'title', 'levelGentle', 'currentLabel', 'rulesTitle', 'rulesSave', 'rulesMissing',
       'toolsPathTitle', 'toolsPathSave', 'toolsPathReset', 'toolsPathRunning',
-      'ghTitle', 'ghDownload', 'ghLogin', 'ghCopy', 'ghOpenDevice', 'ghCancel',
-      'toolsTitle', 'toolsDownloading', 'toolsUnsupported',
+      'ghTitle', 'ghLogin', 'ghCopy', 'ghOpenDevice', 'ghCancel',
+      'toolsTitle', 'toolsNotFound', 'toolsManaged', 'toolsSystem',
+      'probe', 'downloadIdle', 'downloadKeep', 'downloadContinue', 'downloadRetry',
+      'downloadRunning', 'downloadDone', 'downloadUnsupported',
+      'stateMissing', 'statePartial', 'stateFailed', 'stateSystem',
       'repoSelectLabel', 'repoNone', 'repoTitle',
     ]) {
       assert.ok(keys.includes(key), `${locale} is missing ${key}`)
@@ -226,6 +229,10 @@ test('the client factory registers a localized settings section', () => {
     // lives in AGENTS.md, so these keys must stay gone.
     for (const key of ['intro', 'smallWindow', 'summaryMax', 'summaryGentle', 'rulesIntro', 'ghIntro', 'toolsIntro', 'ghToolNote', 'ghLoginNote']) {
       assert.equal(keys.includes(key), false, `${locale} still carries ${key}`)
+    }
+    // Both panels share one set of labels; per-panel duplicates must stay gone.
+    for (const key of ['ghProbe', 'ghInstalled', 'ghDownload', 'ghRetry', 'ghContinue', 'ghMissing', 'toolsInstall', 'toolsProbe', 'toolsInstalled', 'toolsRetry', 'toolsContinue', 'toolsDownloading']) {
+      assert.equal(keys.includes(key), false, locale + ' split the button labels again with ' + key)
     }
     // The sidebar repository panel is gone; its copy must not linger.
     assert.equal(keys.filter((key) => key.startsWith('repos')).length, 0)
@@ -250,7 +257,7 @@ test('the settings page renders five tier buttons and the global rules editor', 
   assert.equal(textareas.length, 1)
   // Before the rules fetch resolves there is nothing to save.
   assert.equal(textareas[0].props.disabled, true)
-  const save = buttons.find((node) => String(node.props.className || '').includes('ct-save'))
+  const save = buttons.find((node) => node.props['data-action'] === 'rulesSave')
   assert.ok(save, 'the rules panel has a save button')
   assert.equal(save.props.disabled, true)
   assert.equal(nodes.some((node) => node.type === 'style'), false, 'the stylesheet is global, not page-scoped')
@@ -260,7 +267,7 @@ test('the rules editor shows the saved text and enables saving an edit', () => {
   const saved = rulesState('Answer in Chinese.\n')
   const { nodes } = render([settingsState, '', false, saved, 'Answer in Chinese.\nBe brief.\n', '', false])
   const buttons = nodes.filter((node) => node.type === 'button')
-  const save = buttons.find((node) => String(node.props.className || '').includes('ct-save'))
+  const save = buttons.find((node) => node.props['data-action'] === 'rulesSave')
   assert.ok(save)
   assert.equal(save.props.disabled, false)
   const textareas = nodes.filter((node) => node.type === 'textarea')
@@ -277,7 +284,7 @@ test('an unchanged rules draft keeps saving disabled', () => {
   const { nodes } = render([settingsState, '', false, saved, 'Answer in Chinese.\n', '', false])
   const save = nodes
     .filter((node) => node.type === 'button')
-    .find((node) => String(node.props.className || '').includes('ct-save'))
+    .find((node) => node.props['data-action'] === 'rulesSave')
   assert.equal(save.props.disabled, true)
 })
 
@@ -319,9 +326,11 @@ test('the GitHub CLI panel shows the installed binary and the signed-in account'
   // The install button is disabled once a managed binary exists.
   const install = nodes
     .filter((node) => node.type === 'button')
-    .find((node) => String(node.props.className || '').includes('ct-save') && String(node.props.children).includes('ghInstalled'))
+    .find((node) => node.props['data-action'] === 'ghDownload')
   assert.ok(install)
   assert.equal(install.props.disabled, true)
+  assert.equal(textOf(install), 'downloadDone')
+  assert.deepEqual(String(install.props.className).split(' '), ['ct-btn', 'ct-btn--primary'])
 })
 
 test('the session header renders a repository pill that opens a listbox', () => {
@@ -397,9 +406,10 @@ test('the video-tool panel reports both binaries and disables the install button
   assert.match(deepText(rows[1]), /ffprobe\.exe/)
   const install = nodes
     .filter((node) => node.type === 'button')
-    .find((node) => String(node.props.className || '').includes('ct-save') && textOf(node) === 'toolsInstalled')
+    .find((node) => node.props['data-action'] === 'toolsDownload')
   assert.ok(install, 'the panel has an install button')
   assert.equal(install.props.disabled, true)
+  assert.equal(textOf(install), 'downloadDone')
 })
 
 test('a running video-tool download shows its progress and blocks a second start', () => {
@@ -416,8 +426,9 @@ test('a running video-tool download shows its progress and blocks a second start
   const { nodes } = render([settingsState, '', false, null, '', '', false, null, null, '', false, null, tools, '', false])
   const button = nodes
     .filter((node) => node.type === 'button')
-    .find((node) => textOf(node).startsWith('toolsDownloading') && textOf(node).includes('47.9%'))
+    .find((node) => node.props['data-action'] === 'toolsDownload')
   assert.ok(button, 'the button reports the running download')
+  assert.equal(textOf(button), 'downloadRunning')
   assert.equal(button.props.disabled, true)
   const bar = nodes.find((node) => String(node.props.className || '') === 'ct-progress')
   assert.ok(bar, 'the panel renders a progress bar')
@@ -429,9 +440,10 @@ test('the video-tool button says loading until the status arrives', () => {
   const { nodes } = render([settingsState, '', false, null, '', '', false, null, null, '', false, null, null, '', false])
   const button = nodes
     .filter((node) => node.type === 'button')
-    .find((node) => textOf(node) === 'toolsLoading')
+    .find((node) => node.props['data-action'] === 'toolsDownload')
   assert.ok(button, 'the panel shows a loading label instead of claiming the platform is unsupported')
   assert.equal(button.props.disabled, true)
+  assert.equal(textOf(button), 'loading')
 })
 
 test('the repository pill shows the bound name and opens a listbox', () => {
@@ -492,6 +504,104 @@ const pathStatus = {
   running: { gh: false, ffmpeg: false },
 }
 
+/** The download control payloads, one per panel, for the parity tests. */
+function ghPayload(state, percent) {
+  return {
+    gh: {
+      id: 'gh', name: 'GitHub CLI', version: '2.76.2', supported: true, state,
+      installed: state === 'installed', system: state === 'system', systemPath: null,
+      binaryPath: state === 'installed' ? 'C:/dsh/compression-tiers/gh/bin/gh.exe' : null,
+      sourceKind: state === 'installed' ? 'managed' : null,
+      received: percent ? 1000 : 0, total: percent ? 2000 : null, percent: percent || null, error: null,
+    },
+    login: { active: false, state: 'idle', code: null, url: null, note: '', error: null, startedAt: null },
+  }
+}
+
+function toolsPayload(state, download, managed) {
+  const found = state === 'installed' || state === 'partial'
+  return {
+    supported: true,
+    platform: 'win32',
+    arch: 'x64',
+    state,
+    version: found ? '7.1.1' : null,
+    ffmpeg: found ? { path: 'C:/dsh/compression-tiers/ffmpeg/bin/ffmpeg.exe', managed: managed !== false, version: '7.1.1' } : null,
+    ffprobe: state === 'installed' ? { path: 'C:/dsh/compression-tiers/ffmpeg/bin/ffprobe.exe', managed: managed !== false, version: '7.1.1' } : null,
+    download: download || { running: false, received: 0, total: null, percent: null, error: null },
+  }
+}
+
+const GH_AT = 7
+const TOOLS_AT = 12
+
+/** Render the page with a GitHub payload and a video payload in place. */
+function renderBoth(ghBody, toolsBody) {
+  const states = [settingsState, '', false, null, '', '', false, ghBody, null, '', false, null, toolsBody, '', false]
+  return render(states).nodes
+}
+
+function buttonOf(nodes, action) {
+  return nodes.filter((node) => node.type === 'button' && node.props['data-action'] === action)[0] || null
+}
+
+test('both download panels obey one button standard', () => {
+  const missing = renderBoth(ghPayload('missing'), toolsPayload('missing'))
+  for (const [action, label, primary] of [['ghDownload', 'downloadIdle', true], ['toolsDownload', 'downloadIdle', true], ['ghProbe', 'probe', false], ['toolsProbe', 'probe', false]]) {
+    const button = buttonOf(missing, action)
+    assert.ok(button, action + ' is rendered')
+    assert.deepEqual(String(button.props.className).split(' '), primary ? ['ct-btn', 'ct-btn--primary'] : ['ct-btn'])
+    assert.equal(textOf(button), label)
+    assert.equal(button.props.disabled, false)
+  }
+  // Download first, re-check second, in one row, in both panels.
+  const flatten = (value) => (Array.isArray(value) ? value.flat(Infinity) : [value])
+  const downloadRows = missing
+    .filter((node) => node.props.className === 'ct-actions')
+    .map((row) => flatten(row.props.children).filter((child) => child && child.type === 'button'))
+    .filter((buttons) => buttons.some((button) => button.props['data-action'] === 'ghDownload' || button.props['data-action'] === 'toolsDownload'))
+  assert.equal(downloadRows.length, 2)
+  for (const buttons of downloadRows) {
+    const actions = buttons.map((button) => button.props['data-action'])
+    assert.equal(actions.length, 2, 'a panel action row holds exactly the two buttons')
+    assert.ok(actions[0].endsWith('Download'))
+    assert.ok(actions[1].endsWith('Probe'))
+    assert.deepEqual(buttons.map((button) => button.props.className), ['ct-btn ct-btn--primary', 'ct-btn'])
+  }
+})
+
+test('an installed panel and a signed-out one still share the button standard', () => {
+  const installed = renderBoth(ghPayload('installed'), toolsPayload('installed'))
+  for (const action of ['ghDownload', 'toolsDownload']) {
+    const button = buttonOf(installed, action)
+    assert.equal(textOf(button), 'downloadDone')
+    assert.equal(button.props.disabled, true)
+    assert.deepEqual(String(button.props.className).split(' '), ['ct-btn', 'ct-btn--primary'])
+  }
+})
+
+test('a PATH-only install offers the same forced download in both panels', () => {
+  const pathOnly = renderBoth(ghPayload('system'), toolsPayload('installed', null, false))
+  for (const action of ['ghDownload', 'toolsDownload']) {
+    const button = buttonOf(pathOnly, action)
+    assert.equal(textOf(button), 'downloadKeep')
+    assert.equal(button.props.disabled, false)
+  }
+})
+
+test('a running download reports the same label in both panels', () => {
+  const running = renderBoth(
+    ghPayload('downloading', 47.9),
+    toolsPayload('missing', { running: true, received: 1000, total: 2000, percent: 47.9, error: null }),
+  )
+  for (const action of ['ghDownload', 'toolsDownload']) {
+    const button = buttonOf(running, action)
+    assert.equal(textOf(button), 'downloadRunning')
+    assert.equal(button.props.disabled, true)
+  }
+  const bars = running.filter((node) => node.props.className === 'ct-progress')
+  assert.equal(bars.length, 2)
+})
 test('the sign-in buttons are always rendered and disabled while idle', () => {
   const idle = { active: false, state: 'idle', code: null, url: null, note: '', error: null, startedAt: null }
   const { nodes } = render([...IDLE_PAGE.slice(0, 7), ghState(idle), authState, '', false])

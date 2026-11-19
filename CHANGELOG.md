@@ -1,6 +1,13 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.7.0`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.7.1`。
+
+## 1.7.1 — 2026-11-20
+
+- **按钮统一成一套标准**：以前每个面板各自拼 `<button class="ct-save">`，GitHub CLI 与音视频两栏越改越不像（一个把状态文字塞进按钮行、一个把工具列表插在按钮上方）。现在所有动作按钮经 `actionButton()` 渲染：基础类 `ct-btn`（30px 高、`0 12px` 内边距、10px 圆角），主操作只多一个 `ct-btn--primary`（选中色描边 + 模块底色），尺寸、字号、间距、禁用态、焦点圈完全一致；旧的 `ct-save` 删除。
+- **两个下载面板同构**：「下载」与「重新检测」在 GitHub CLI 和 ffmpeg/ffprobe 两栏里位置、顺序、样式都一样——状态行 → 进度条 → 路径/错误行 → 一行两个按钮（下载在左、重新检测在右），按钮只放在 `ct-actions` 行里，状态文字另起一行。
+- **共享状态与标签**：新增 `downloadControl()`，两个面板用同一套规则算出状态文案与按钮标签（`downloadIdle` / `downloadKeep` / `downloadContinue` / `downloadRetry` / `downloadRunning` / `downloadDone` / `downloadUnsupported`、`stateMissing` / `statePartial` / `stateFailed` / `stateSystem`、`probe`），删掉 `ghDownload`、`ghProbe`、`ghInstalled`、`toolsInstall`、`toolsProbe`、`toolsDownloading`、`toolsUnsupported`、`toolsLoading` 等按面板分裂的副本；PATH 里只有系统副本时两边都显示「仍要下载」且可点。
+- 测试：新增四个按钮一致性用例（类名、标签键、禁用态、行内顺序、PATH-only 强制下载、运行中的进度），共 135 条；`test/client.test.js` 同时断言按面板分裂的标签键不会回归。
 
 ## 1.7.0 — 2026-11-19
 

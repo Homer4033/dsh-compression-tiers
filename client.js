@@ -67,18 +67,18 @@ window.__ModuleLoader__.load({
         toolsPathFailed: '迁移失败：',
         toolsPathLoadFailed: '读取下载位置失败：',
         ghTitle: 'GitHub CLI',
-        ghProbe: '重新检测',
-        ghInstalled: '已安装',
-        ghSystem: '系统已安装（PATH）',
-        ghDownloading: '下载中 ',
-        ghPartial: '未完成，可续传',
-        ghFailed: '下载失败',
-        ghMissing: '未安装',
-        ghDownload: '下载',
-        ghKeepDownload: '仍要下载',
-        ghContinue: '继续下载',
-        ghRetry: '重试',
-        ghUnsupported: '当前系统不可用',
+        probe: '重新检测',
+        downloadIdle: '下载',
+        downloadKeep: '仍要下载',
+        downloadContinue: '继续下载',
+        downloadRetry: '重试',
+        downloadRunning: '下载中 ',
+        downloadDone: '已安装',
+        downloadUnsupported: '当前系统不可用',
+        stateMissing: '未安装',
+        statePartial: '未完成，可续传',
+        stateFailed: '下载失败',
+        stateSystem: '系统已安装（PATH）',
         ghPathLabel: '路径',
         ghAuthUnknown: '正在读取登录状态…',
         ghAuthUnavailable: '不可登录',
@@ -111,14 +111,7 @@ window.__ModuleLoader__.load({
         toolsNotFound: '未找到',
         toolsManaged: '托管版',
         toolsSystem: '系统 PATH',
-        toolsLoading: '读取中…',
-        toolsInstalled: '已安装',
-        toolsInstall: '下载安装',
-        toolsContinue: '继续下载',
-        toolsRetry: '重试',
-        toolsProbe: '重新检测',
-        toolsDownloading: '下载中 ',
-        toolsUnsupported: '当前系统没有托管版',
+
         toolsLoadFailed: '读取音视频工具状态失败：',
         toolsActionFailed: '操作失败：',
         repoSelectLabel: '仓库',
@@ -178,18 +171,18 @@ window.__ModuleLoader__.load({
         toolsPathFailed: 'Could not move: ',
         toolsPathLoadFailed: 'Could not read the download location: ',
         ghTitle: 'GitHub CLI',
-        ghProbe: 'Re-check',
-        ghInstalled: 'Installed',
-        ghSystem: 'System install (PATH)',
-        ghDownloading: 'Downloading ',
-        ghPartial: 'Incomplete, can resume',
-        ghFailed: 'Download failed',
-        ghMissing: 'Not installed',
-        ghDownload: 'Download',
-        ghKeepDownload: 'Download anyway',
-        ghContinue: 'Resume download',
-        ghRetry: 'Retry',
-        ghUnsupported: 'Unavailable on this system',
+        probe: 'Re-check',
+        downloadIdle: 'Download',
+        downloadKeep: 'Download anyway',
+        downloadContinue: 'Resume download',
+        downloadRetry: 'Retry',
+        downloadRunning: 'Downloading ',
+        downloadDone: 'Installed',
+        downloadUnsupported: 'Unavailable on this system',
+        stateMissing: 'Not installed',
+        statePartial: 'Incomplete, can resume',
+        stateFailed: 'Download failed',
+        stateSystem: 'System install (PATH)',
         ghPathLabel: 'Path',
         ghAuthUnknown: 'Reading the sign-in state…',
         ghAuthUnavailable: 'cannot sign in',
@@ -222,14 +215,7 @@ window.__ModuleLoader__.load({
         toolsNotFound: 'not found',
         toolsManaged: 'managed',
         toolsSystem: 'system PATH',
-        toolsLoading: 'Loading…',
-        toolsInstalled: 'Installed',
-        toolsInstall: 'Download and install',
-        toolsContinue: 'Resume download',
-        toolsRetry: 'Retry',
-        toolsProbe: 'Re-check',
-        toolsDownloading: 'Downloading ',
-        toolsUnsupported: 'No managed build for this system',
+
         toolsLoadFailed: 'Could not read the video-tool state: ',
         toolsActionFailed: 'Action failed: ',
         repoSelectLabel: 'Repo',
@@ -419,30 +405,50 @@ window.__ModuleLoader__.load({
   align-items: center;
   gap: 10px;
 }
-.ct-save {
+/* One button standard for the whole page: the ct-btn base is the geometry,
+   ct-btn--primary only changes emphasis. Every panel renders its actions in a
+   ct-actions row so the GitHub, download-location and video panels cannot
+   drift into different-looking buttons. */
+.ct-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ct-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
   margin: 0;
-  border: 1px solid var(--dsw-alias-border-selected);
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
-  padding: 6px 14px;
-  background: var(--dsw-alias-bg-module-platform);
+  background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 13px;
-  line-height: 20px;
+  line-height: 18px;
+  white-space: nowrap;
   cursor: pointer;
 }
+.ct-btn--primary {
+  border-color: var(--dsw-alias-border-selected);
+  background: var(--dsw-alias-bg-module-platform);
+}
 @media (hover: hover) {
-  .ct-save:hover:not(:disabled) {
+  .ct-btn:hover:not(:disabled) {
     background: var(--dsw-alias-interactive-bg-hover);
   }
 }
-.ct-save:disabled {
+.ct-btn:disabled {
   border-color: var(--dsw-alias-border-l2);
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: default;
 }
-.ct-save:focus-visible {
+.ct-btn:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 2px;
 }
@@ -674,6 +680,28 @@ window.__ModuleLoader__.load({
     /** Absolute on Windows (`C:\x`, `\\host\share`) or POSIX (`/x`). */
     function looksAbsolute(value) {
       return /^([A-Za-z]:[\\/]|\\\\|\/)/.test(String(value || '').trim())
+    }
+
+    /**
+     * The one button standard for this page. `ct-btn` is the geometry, the
+     * `ct-btn--primary` modifier only adds emphasis, and `data-action` gives
+     * tests a stable handle. No panel may style its own button.
+     */
+    function actionButton(action, label, options) {
+      const config = options || {}
+      return h('button', {
+        type: 'button',
+        className: 'ct-btn' + (config.primary ? ' ct-btn--primary' : ''),
+        'data-action': action,
+        disabled: config.disabled === true,
+        title: config.title || '',
+        onClick: config.onClick,
+      }, label)
+    }
+
+    /** Every panel renders its buttons in this row and nothing else. */
+    function actionRow(children) {
+      return h('div', { className: 'ct-actions' }, children)
     }
 
     function timeLabel(value) {
@@ -1320,6 +1348,42 @@ window.__ModuleLoader__.load({
         if (node && typeof node.focus === 'function') node.focus()
       }
 
+      /**
+       * The one download control shared by the GitHub CLI and video-tool
+       * panels: identical state line and button label for identical states, so
+       * the two panels cannot drift into different-looking controls again.
+       */
+      function downloadControl(model) {
+        const loading = model.loading === true
+        const unsupported = model.unsupported === true
+        const running = model.running === true
+        const system = model.system === true
+        const installed = model.installed === true && !system
+        const percent = model.percent == null ? '' : model.percent + '%'
+        const stateText = loading
+          ? t('loading')
+          : unsupported ? t('downloadUnsupported')
+            : running ? t('downloadRunning') + percent
+              : system ? t('stateSystem')
+                : installed ? t('downloadDone')
+                  : model.failed === true ? t('stateFailed')
+                    : model.partial === true ? t('statePartial')
+                      : t('stateMissing')
+        const label = loading
+          ? t('loading')
+          : unsupported ? t('downloadUnsupported')
+            : running ? t('downloadRunning')
+              : system ? t('downloadKeep')
+                : installed ? t('downloadDone')
+                  : model.failed === true ? t('downloadRetry')
+                    : model.partial === true ? t('downloadContinue')
+                      : t('downloadIdle')
+        return {
+          stateText,
+          label,
+          disabled: loading || unsupported || running || installed,
+        }
+      }
       const levels = state && Array.isArray(state.levels) && state.levels.length ? state.levels : LEVELS.map(function (id) {
         return { id: id }
       })
@@ -1372,16 +1436,16 @@ window.__ModuleLoader__.load({
             disabled: rulesBusy || !rules,
             onChange: function (event) { setRulesText(event.target.value) },
           })),
-        h('div', { className: 'ct-row' },
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
+        h('p', { className: 'ct-note' }, rules
+          ? t('rulesChars') + ' ' + rulesCount + ' / ' + rulesLimit
+          : (rulesMessage ? '' : t('rulesLoading'))),
+        actionRow([
+          actionButton('rulesSave', rulesBusy ? t('rulesSaving') : t('rulesSave'), {
             disabled: rulesBusy || !rules || !dirty,
             onClick: saveRules,
-          }, rulesBusy ? t('rulesSaving') : t('rulesSave')),
-          h('span', { className: 'ct-note' }, rules
-            ? t('rulesChars') + ' ' + rulesCount + ' / ' + rulesLimit
-            : (rulesMessage ? '' : t('rulesLoading')))),
+            primary: true,
+          }),
+        ]),
         h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, rulesMessage),
         rules && rules.path
           ? h('p', { className: 'ct-note' }, t('rulesPathLabel') + t('sep') + rules.path + (rules.exists === false ? ' — ' + t('rulesMissing') : ''))
@@ -1389,34 +1453,17 @@ window.__ModuleLoader__.load({
 
       const ghItem = gh && gh.gh ? gh.gh : null
       const login = gh && gh.login ? gh.login : null
-      const ghSupported = ghItem ? ghItem.supported !== false : false
-      const ghBusyNow = ghBusy || (ghItem ? ghItem.state === 'downloading' : false)
-      const ghStateText = !ghItem
-        ? t('loading')
-        : ghItem.state === 'installed'
-          ? t('ghInstalled')
-          : ghItem.state === 'system'
-            ? t('ghSystem')
-            : ghItem.state === 'downloading'
-              ? t('ghDownloading') + (ghItem.percent == null ? '' : ghItem.percent + '%')
-              : ghItem.state === 'partial'
-                ? t('ghPartial')
-                : ghItem.state === 'error'
-                  ? t('ghFailed')
-                  : t('ghMissing')
-      const downloadLabel = !ghItem || ghItem.supported === false
-        ? t('ghUnsupported')
-        : ghItem.state === 'installed'
-          ? t('ghInstalled')
-          : ghItem.state === 'system'
-            ? t('ghKeepDownload')
-            : ghItem.state === 'downloading'
-              ? t('ghDownloading')
-              : ghItem.state === 'partial'
-                ? t('ghContinue')
-                : ghItem.state === 'error'
-                  ? t('ghRetry')
-                  : t('ghDownload')
+      const ghControl = downloadControl({
+        loading: !ghItem,
+        unsupported: Boolean(ghItem && ghItem.supported === false),
+        running: Boolean(ghItem && ghItem.state === 'downloading'),
+        installed: Boolean(ghItem && ghItem.state === 'installed'),
+        partial: Boolean(ghItem && ghItem.state === 'partial'),
+        failed: Boolean(ghItem && ghItem.state === 'error'),
+        system: Boolean(ghItem && ghItem.state === 'system'),
+        percent: ghItem ? ghItem.percent : null,
+      })
+      const ghStatusText = ghControl.stateText + (ghItem && ghItem.version ? ' · v' + ghItem.version : '')
       const authText = auth === null
         ? t('ghAuthUnknown')
         : !auth.available
@@ -1437,30 +1484,25 @@ window.__ModuleLoader__.load({
       const loginInactiveTitle = loginActive ? '' : t('ghLoginInactive')
       const ghLoginBlock = h('div', { className: 'ct-rules-head' },
         h('p', { className: 'ct-note' }, loginLead),
-        h('div', { className: 'ct-row' },
-          h('code', { className: 'ct-code' }, loginCode || '—'),
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
+        h('div', { className: 'ct-row' }, h('code', { className: 'ct-code' }, loginCode || '—')),
+        actionRow([
+          actionButton('ghCopy', t('ghCopy'), {
             disabled: ghBusy || !loginCode,
             title: loginCode ? '' : t('ghLoginInactive'),
             onClick: copyCode,
-          }, t('ghCopy'))),
-        h('div', { className: 'ct-row' },
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
+          }),
+          actionButton('ghOpenDevice', t('ghOpenDevice'), {
             disabled: ghBusy || !loginActive,
             title: loginInactiveTitle,
             onClick: openDevice,
-          }, t('ghOpenDevice')),
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
+            primary: true,
+          }),
+          actionButton('ghCancel', t('ghCancel'), {
             disabled: ghBusy || !loginActive,
             title: loginInactiveTitle,
             onClick: cancelLogin,
-          }, t('ghCancel'))),
+          }),
+        ]),
         login && login.error ? h('p', { className: 'ct-status', role: 'alert' }, login.error) : null)
       const networkText = !network
         ? ''
@@ -1476,30 +1518,17 @@ window.__ModuleLoader__.load({
         networkText
           ? h('p', { className: 'ct-note' }, t('ghNetworkLabel') + t('sep') + networkText + (dnsNote ? ' · ' + dnsNote : ''))
           : null,
-        h('div', { className: 'ct-row' },
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
-            onClick: function () { loadNetwork() },
-          }, t('ghNetwork'))))
+        actionRow([
+          actionButton('ghNetwork', t('ghNetwork'), { onClick: function () { loadNetwork() } }),
+        ]))
 
+      // Same shape as the video panel below: title, one state line, the
+      // progress bar, path/error lines, then one action row with the same two
+      // buttons in the same order.
       const ghPanel = h('section', { className: 'ct-panel' },
         h('div', { className: 'ct-rules-head' },
           h('h3', null, t('ghTitle'))),
-        h('div', { className: 'ct-row' },
-          h('span', { className: 'ct-note' }, ghStateText),
-          ghItem && ghItem.version ? h('span', { className: 'ct-note' }, 'v' + ghItem.version) : null,
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
-            disabled: ghBusyNow || !ghItem || ghItem.state === 'installed' || !ghSupported,
-            onClick: downloadGh,
-          }, downloadLabel),
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
-            onClick: function () { loadGithub(); loadAuth() },
-          }, t('ghProbe'))),
+        h('p', { className: 'ct-note' }, ghStatusText),
         ghItem && (ghItem.state === 'downloading' || ghItem.state === 'partial') && ghItem.percent != null
           ? h('div', { className: 'ct-progress' }, h('span', { style: { width: ghItem.percent + '%' } }))
           : null,
@@ -1507,14 +1536,22 @@ window.__ModuleLoader__.load({
           ? h('p', { className: 'ct-note' }, t('ghPathLabel') + t('sep') + ghItem.binaryPath)
           : null,
         ghItem && ghItem.error ? h('p', { className: 'ct-status', role: 'alert' }, ghItem.error) : null,
-        h('div', { className: 'ct-row' },
-          h('span', { className: 'ct-note' }, authText),
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
+        actionRow([
+          actionButton('ghDownload', ghControl.label, {
+            disabled: ghBusy || ghControl.disabled,
+            onClick: downloadGh,
+            primary: true,
+          }),
+          actionButton('ghProbe', t('probe'), { onClick: function () { loadGithub(); loadAuth() } }),
+        ]),
+        h('p', { className: 'ct-note' }, authText),
+        actionRow([
+          actionButton('ghLogin', auth && auth.authenticated ? t('ghRelogin') : t('ghLogin'), {
             disabled: ghBusy || loggingIn || !auth || !auth.available,
             onClick: loginGh,
-          }, auth && auth.authenticated ? t('ghRelogin') : t('ghLogin'))),
+            primary: true,
+          }),
+        ]),
         auth && auth.missingRepoScope
           ? h('p', { className: 'ct-status', role: 'alert' }, t('ghScopeMissing'))
           : null,
@@ -1527,17 +1564,17 @@ window.__ModuleLoader__.load({
       const toolsSupported = toolsItem ? toolsItem.supported !== false : false
       const toolsRunningNow = toolsDownload ? toolsDownload.running === true : false
       const toolsInstalled = toolsItem ? toolsItem.state === 'installed' : false
-      const toolsButton = !toolsItem
-        ? t('toolsLoading')
-        : !toolsSupported
-          ? t('toolsUnsupported')
-          : toolsRunningNow
-            ? t('toolsDownloading') + (toolsDownload.percent == null ? '' : toolsDownload.percent + '%')
-            : toolsInstalled
-              ? t('toolsInstalled')
-              : toolsDownload && toolsDownload.error
-                ? t('toolsRetry')
-                : toolsItem.state === 'missing' ? t('toolsInstall') : t('toolsContinue')
+      const toolsControl = downloadControl({
+        loading: !toolsItem,
+        unsupported: Boolean(toolsItem && toolsItem.supported === false),
+        running: toolsRunningNow,
+        installed: toolsInstalled,
+        partial: Boolean(toolsItem && toolsItem.state === 'partial'),
+        failed: Boolean(toolsDownload && toolsDownload.error),
+        system: Boolean(toolsItem && toolsItem.state === 'installed' && toolsItem.ffmpeg && toolsItem.ffmpeg.managed === false),
+        percent: toolsDownload ? toolsDownload.percent : null,
+      })
+      const toolsStatusText = toolsControl.stateText + (toolsItem && toolsItem.version ? ' · v' + toolsItem.version : '')
       const toolRow = function (name, info) {
         const version = info && info.version ? ' v' + info.version : ''
         const origin = !info
@@ -1551,27 +1588,24 @@ window.__ModuleLoader__.load({
       const toolsPanel = h('section', { className: 'ct-panel' },
         h('div', { className: 'ct-rules-head' },
           h('h3', null, t('toolsTitle'))),
+        h('p', { className: 'ct-note' }, toolsStatusText),
         h('div', { className: 'ct-tools-list' },
           toolRow('ffmpeg', toolsItem ? toolsItem.ffmpeg : null),
           toolRow('ffprobe', toolsItem ? toolsItem.ffprobe : null)),
-        h('div', { className: 'ct-row' },
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
-            disabled: toolsBusy || !toolsItem || !toolsSupported || toolsRunningNow || toolsInstalled,
-            onClick: downloadTools,
-          }, toolsButton),
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
-            onClick: function () { loadTools() },
-          }, t('toolsProbe'))),
         toolsRunningNow || (toolsDownload && toolsDownload.error && toolsDownload.percent != null)
           ? h('div', { className: 'ct-progress' }, h('span', { style: { width: (toolsDownload.percent || 0) + '%' } }))
           : null,
         toolsDownload && toolsDownload.error
           ? h('p', { className: 'ct-status', role: 'alert' }, toolsDownload.error)
           : null,
+        actionRow([
+          actionButton('toolsDownload', toolsControl.label, {
+            disabled: toolsBusy || !toolsItem || toolsControl.disabled,
+            onClick: downloadTools,
+            primary: true,
+          }),
+          actionButton('toolsProbe', t('probe'), { onClick: function () { loadTools() } }),
+        ]),
         toolsMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsMessage) : null)
 
       // One download root for both managed tools. The move button is always
@@ -1602,25 +1636,23 @@ window.__ModuleLoader__.load({
               disabled: toolsPathBusy,
               onChange: function (event) { setToolsPathDraft(event.target.value) },
             }))),
-        h('div', { className: 'ct-row' },
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
+        h('p', { className: 'ct-note' }, toolsPathCurrent
+          ? t('toolsPathCurrent') + t('sep') + toolsPathCurrent
+          : (toolsPathMessage ? '' : t('loading'))),
+        toolsPathRunningNow ? h('p', { className: 'ct-note' }, t('toolsPathRunning')) : null,
+        actionRow([
+          actionButton('toolsPathMigrate', toolsPathBusy ? t('rulesSaving') : t('toolsPathSave'), {
             disabled: toolsPathDisabled,
             title: toolsPathInputTitle,
             onClick: function () { migrateToolsPath(toolsPathClean) },
-          }, toolsPathBusy ? t('rulesSaving') : t('toolsPathSave')),
-          h('button', {
-            type: 'button',
-            className: 'ct-save',
+            primary: true,
+          }),
+          actionButton('toolsPathReset', t('toolsPathReset'), {
             disabled: toolsPathBusy || toolsPathRunningNow || !toolsPathDefault || samePathDraft(toolsPathCurrent, toolsPathDefault),
             title: toolsPathRunningNow ? t('toolsPathRunning') : '',
             onClick: function () { migrateToolsPath(toolsPathDefault) },
-          }, t('toolsPathReset')),
-          h('span', { className: 'ct-note' }, toolsPathCurrent
-            ? t('toolsPathCurrent') + t('sep') + toolsPathCurrent
-            : (toolsPathMessage ? '' : t('loading')))),
-        toolsPathRunningNow ? h('p', { className: 'ct-note' }, t('toolsPathRunning')) : null,
+          }),
+        ]),
         h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsPathMessage))
 
       return h('section', { className: 'ct-page' },

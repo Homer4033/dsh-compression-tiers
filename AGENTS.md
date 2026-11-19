@@ -51,6 +51,7 @@
 15. 设置页只放控件标签、当前值、路径与错误信息。不写教学性说明段（面板介绍、原理、操作步骤、"为什么需要它"）：这类文字写进本文件或 README，界面上的 `intro` / `*Note` 一类键不再新增；旧键删除后不得加回。示例值只能作为输入框 `placeholder`，不能变成段落。
 16. 所有动作按钮必须常显：条件不满足时渲染为 `disabled` 并用 `title`（或同一行的状态文本）说明原因，不得用条件渲染把按钮整个隐藏（弹层、菜单、进度条不在此列，它们不是动作按钮）。设置页现有按钮——档位、规则保存、gh 下载/重新检测/登录、设备码复制/打开授权页/取消、下载位置迁移/恢复默认、音视频下载/重新检测——都按这条执行。
 17. 下载根目录规则：`toolsPath` 只接受绝对路径，非法或相对值回落默认（写库时归一化为空串）；迁移前先做完整预检（目标已有同名组件即拒绝、下载进行中返回 409），两个组件要么都搬、要么都不动；跨卷 `EXDEV` 退化为复制后删除；迁移成功才写 `toolsPath`，失败保留旧值以便重试；迁移后必须把本进程 PATH 里的旧 `bin` 目录换成新的。
+18. 设置页按钮只有一套标准：所有动作按钮经 `actionButton()` 渲染（基础类 `ct-btn`，主操作 `ct-btn--primary` 只加描边与底色，不改尺寸）；每个面板把按钮放进一个 `ct-actions` 行，行内只放按钮、状态文字另起一行；按钮标签走共享键（`downloadIdle` / `downloadKeep` / `downloadContinue` / `downloadRetry` / `downloadRunning` / `downloadDone` / `downloadUnsupported`、`probe`、`stateMissing` / `statePartial` / `stateFailed` / `stateSystem`），禁止再出现 `ghDownload` / `toolsInstall` 这类按面板分裂的副本。GitHub CLI 与音视频两个面板的「下载 / 重新检测」必须结构一致（状态行 → 进度 → 路径/错误 → 同一行两个按钮，下载在左、重新检测在右）。
 
 ## 验证要求
 
@@ -63,7 +64,7 @@
 - 修改会话发布仓库（`sessionRepos`、`/api/github/online`、`/api/github/binding`）后，`test/gh.test.js` 覆盖仓库行解析与 `gh` 缺失分类，`test/store.test.js` 覆盖 `owner/name` 归一化与 200 条上限，`test/client.test.js` 覆盖会话头选择器的注册、选项与状态提示。
 - 修改 `src/http.js` 的 `queryParam` 后，`test/http.test.js` 必须覆盖缺参、空值与非字符串请求。
 - 修改 `src/tools-path.js`、`/compression-tiers/api/tools` 或设置页「下载位置」面板后，`test/tools-path.test.js` 必须覆盖默认根、绝对路径校验、两个组件整体迁移、目标已存在时预检拒绝、下载进行中 409、跨卷 `EXDEV` 回退与「搬一半后重试」；`test/store.test.js` 覆盖 `toolsPath` 归一化，`test/client.test.js` 覆盖迁移与恢复默认按钮的禁用态。
-- 修改设置页文案或按钮后，`test/client.test.js` 必须覆盖：动作按钮常显（含设备码复制 / 打开授权页 / 取消在空闲时仍渲染且 `disabled`），以及说明段键已删除（`intro`、`ghToolNote` 等不得回到字典里）。
+- 修改设置页文案或按钮后，`test/client.test.js` 必须覆盖：动作按钮常显（含设备码复制 / 打开授权页 / 取消在空闲时仍渲染且 `disabled`）、说明段键已删除（`intro`、`ghToolNote` 等不得回到字典里），以及两个下载面板的按钮一致性（同样的类名、同样的标签键、同样的禁用态、同样的一行顺序）；按面板分裂的标签键（`ghDownload`、`toolsInstall` 等）不得回归。
 - 发布前运行 `npm run check:secrets`；新增运行时文件、改 `package.json` 的 `files` 或版本号后同步 `CHANGELOG.md` 并按版本打 tag（`vX.Y.Z`）。
 - 修改 manifest、locale、图标或 `client.js` 注册方式后，检查 `test/manifest.test.js` 全绿。
 - 安装验证以插件页的 `application` 结果与新会话中的工具/设置为准，不以下载或日志推断成功。
@@ -98,3 +99,4 @@
 - 2026-11-19：样式表改为插件加载时全局注入 `style[data-compression-tiers]`（卸载移除），不再依赖设置页渲染 `<style>`；此前未打开设置页时胶囊无样式（SVG 默认 300×150 撑爆标签行）。版本 1.6.3。
 - 2026-11-19：会话头仓库选择器改用自绘深色弹层（portal 到 body、fixed 定位、role=listbox/option、Esc/外部点击/resize 关闭），不再用原生 select（系统白底 + 浅色文字导致选项不可见）；版本 1.6.4。
 - 2026-11-19：统一下载位置：新增 `src/tools-path.js`（默认根 `<DSH home>/compression-tiers`、绝对路径校验、两组件整体迁移、跨卷回退、下载中 409）与 `/compression-tiers/api/tools`；`src/gh.js` / `src/ffmpeg.js` 的首个参数由 DSH home 改为共享根目录（`<root>/gh`、`<root>/ffmpeg`，默认路径与 1.6.x 完全一致，升级不搬文件），设置页新增「下载位置」面板（迁移 / 恢复默认）。`settings.json` 新增 `toolsPath`。设置页删掉全部教学性说明段（页面 intro、档位点评、规则/GitHub/音视频面板说明、`ghToolNote`、`ghLoginNote`），相关规则写进本文件第 15 条；设备码复制 / 打开授权页 / 取消三个按钮改为常显（不可用时 `disabled` + `title` 说明），遵守第 16 条；版本 1.7.0。
+- 2026-11-20：设置页按钮统一为一套标准（第 18 条）：新增 `actionButton()` / `actionRow()` 与 `ct-btn`、`ct-btn--primary` 样式，删掉旧的 `ct-save`；GitHub CLI 与音视频面板的「下载 / 重新检测」改成同一结构（状态行 → 进度 → 路径/错误 → 一行两个按钮，下载在左、重新检测在右），两个面板的下载控制都由 `downloadControl()` 计算状态与标签；按钮文案合并为共享键（`download*` / `probe` / `state*`），删掉 `ghDownload`、`ghProbe`、`toolsInstall`、`toolsProbe`、`toolsDownloading`、`toolsUnsupported`、`toolsLoading` 等按面板分裂的副本。测试增至 135 条（新增四个按钮一致性用例）；版本 1.7.1。
