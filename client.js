@@ -19,23 +19,18 @@ window.__ModuleLoader__.load({
     const GH_ONLINE_API = '/compression-tiers/api/github/online'
     const GH_BINDING_API = '/compression-tiers/api/github/binding'
     const FFMPEG_API = '/compression-tiers/api/ffmpeg'
+    const TOOLS_API = '/compression-tiers/api/tools'
 
     const DICTIONARIES = {
       zh: {
         sectionLabel: '上下文压缩',
         title: '上下文压缩',
-        intro: '五档自动压缩，切换即同步到所有预设引擎；下方还有全局规则、GitHub CLI 与音视频工具。',
         levelsAria: '压缩档位',
         levelGentle: '极轻',
         levelLight: '轻量',
         levelStandard: '标准',
         levelAggressive: '积极',
         levelMax: '最大',
-        summaryGentle: '最晚触发，与官方默认一致。',
-        summaryLight: '比官方默认早一档。',
-        summaryStandard: '默认：长对话更省。',
-        summaryAggressive: '更早压缩，成本优先。',
-        summaryMax: '最省：40% 就压缩。',
         auto: '自动 ',
         retain: '留 ',
         sep: '：',
@@ -49,9 +44,7 @@ window.__ModuleLoader__.load({
         lastCompact: '上次压缩',
         never: '暂无',
         settingsPath: '设置文件',
-        smallWindow: '按 ≥256k 窗口设计；更小的窗口主要差在保留量。',
         rulesTitle: '全局规则',
-        rulesIntro: '编辑官方 AGENTS.md，下次会话生效。',
         rulesLabel: '规则内容',
         rulesPlaceholder: '例如：回答用中文；改动前先读 AGENTS.md。',
         rulesSave: '保存',
@@ -63,8 +56,17 @@ window.__ModuleLoader__.load({
         rulesPathLabel: '文件',
         rulesLoading: '读取中…',
         rulesMissing: '不存在，保存后创建。',
+        toolsPathTitle: '下载位置',
+        toolsPathLabel: '目录',
+        toolsPathCurrent: '当前目录',
+        toolsPathSave: '迁移',
+        toolsPathReset: '恢复默认',
+        toolsPathSaved: '已迁移。',
+        toolsPathInvalid: '需要绝对路径。',
+        toolsPathRunning: '下载中，完成后再迁移。',
+        toolsPathFailed: '迁移失败：',
+        toolsPathLoadFailed: '读取下载位置失败：',
         ghTitle: 'GitHub CLI',
-        ghIntro: '官方变更请求面板需要。系统 PATH 里已有会自动使用，也可下载托管版（v2.76.2，可断点续传）。',
         ghProbe: '重新检测',
         ghInstalled: '已安装',
         ghSystem: '系统已安装（PATH）',
@@ -79,13 +81,14 @@ window.__ModuleLoader__.load({
         ghUnsupported: '当前系统不可用',
         ghPathLabel: '路径',
         ghAuthUnknown: '正在读取登录状态…',
-        ghAuthUnavailable: '下载 GitHub CLI 后可登录。',
+        ghAuthUnavailable: '不可登录',
         ghLoggedIn: '已登录：',
         ghNotLoggedIn: '未登录',
         ghLogin: '登录 GitHub',
         ghRelogin: '重新登录',
         ghLoginStarting: '正在启动 gh 登录…',
-        ghLoginNote: '在浏览器里粘贴一次性验证码并授权，完成后这里会自动更新。',
+        ghLoginWaiting: '等待授权',
+        ghLoginInactive: '未在登录中',
         ghLoginDone: '授权完成，凭据已由 gh 保存。',
         ghLoginFailed: '登录没有完成，可以重试。',
         ghCopy: '复制验证码',
@@ -104,9 +107,7 @@ window.__ModuleLoader__.load({
         ghNetworkUnknown: '未知',
         ghDnsOff: 'DNS 不是 GitHub 地址',
         ghScopeMissing: '令牌缺少 repo scope，私有仓库推送会失败。',
-        ghToolNote: '发布交给 github_push 工具：默认推本会话的工作目录，先体检网络、扫密钥，再带超时推送。这一栏只管 gh 本身与网络体检。',
         toolsTitle: '音视频工具',
-        toolsIntro: 'ffmpeg 与 ffprobe：可下载托管版（约 110 MB，断点续传），也可直接用系统 PATH 里的版本；托管版优先。',
         toolsNotFound: '未找到',
         toolsManaged: '托管版',
         toolsSystem: '系统 PATH',
@@ -135,18 +136,12 @@ window.__ModuleLoader__.load({
       en: {
         sectionLabel: 'Context compression',
         title: 'Context compression',
-        intro: 'Five automatic tiers: switching syncs every preset engine. Global rules, GitHub CLI and video tools are below.',
         levelsAria: 'Compression tier',
         levelGentle: 'Gentle',
         levelLight: 'Light',
         levelStandard: 'Standard',
         levelAggressive: 'Aggressive',
         levelMax: 'Max',
-        summaryGentle: 'Latest trigger, matches the official default.',
-        summaryLight: 'One step earlier than the default.',
-        summaryStandard: 'Default: cheaper long conversations.',
-        summaryAggressive: 'Compacts sooner, cost first.',
-        summaryMax: 'Cheapest: compacts at 40% of the window.',
         auto: 'Auto ',
         retain: 'keep ',
         sep: ': ',
@@ -160,9 +155,7 @@ window.__ModuleLoader__.load({
         lastCompact: 'Last compaction',
         never: 'none yet',
         settingsPath: 'Settings file',
-        smallWindow: 'Designed for windows of at least 256k tokens; smaller windows mostly differ in retain size.',
         rulesTitle: 'Global rules',
-        rulesIntro: 'Edits the official AGENTS.md; applies from the next session.',
         rulesLabel: 'Rules',
         rulesPlaceholder: 'For example: answer in Chinese; read AGENTS.md before a change.',
         rulesSave: 'Save',
@@ -174,8 +167,17 @@ window.__ModuleLoader__.load({
         rulesPathLabel: 'File',
         rulesLoading: 'Loading…',
         rulesMissing: 'missing; saving creates it.',
+        toolsPathTitle: 'Download location',
+        toolsPathLabel: 'Directory',
+        toolsPathCurrent: 'Current directory',
+        toolsPathSave: 'Move here',
+        toolsPathReset: 'Reset to default',
+        toolsPathSaved: 'Moved.',
+        toolsPathInvalid: 'An absolute path is required.',
+        toolsPathRunning: 'A download is running; move after it finishes.',
+        toolsPathFailed: 'Could not move: ',
+        toolsPathLoadFailed: 'Could not read the download location: ',
         ghTitle: 'GitHub CLI',
-        ghIntro: 'Needed by the official change-request panel. A gh on PATH is used first; the managed build (v2.76.2) can be downloaded here and resumes after an interruption.',
         ghProbe: 'Re-check',
         ghInstalled: 'Installed',
         ghSystem: 'System install (PATH)',
@@ -190,13 +192,14 @@ window.__ModuleLoader__.load({
         ghUnsupported: 'Unavailable on this system',
         ghPathLabel: 'Path',
         ghAuthUnknown: 'Reading the sign-in state…',
-        ghAuthUnavailable: 'Download GitHub CLI to sign in.',
+        ghAuthUnavailable: 'cannot sign in',
         ghLoggedIn: 'Signed in: ',
         ghNotLoggedIn: 'Not signed in',
         ghLogin: 'Sign in to GitHub',
         ghRelogin: 'Sign in again',
         ghLoginStarting: 'Starting gh sign-in…',
-        ghLoginNote: 'Paste the one-time code on the GitHub page and authorize; this panel updates by itself.',
+        ghLoginWaiting: 'Waiting for authorization',
+        ghLoginInactive: 'not signing in',
         ghLoginDone: 'Authorization finished; gh stored the credential.',
         ghLoginFailed: 'Sign-in did not finish; you can retry.',
         ghCopy: 'Copy code',
@@ -215,9 +218,7 @@ window.__ModuleLoader__.load({
         ghNetworkUnknown: 'unknown',
         ghDnsOff: 'DNS is not a GitHub address',
         ghScopeMissing: 'The token has no repo scope; pushing a private repository will fail.',
-        ghToolNote: 'Publishing belongs to the github_push tool: it pushes the session working directory after a network probe and a secret scan. This panel only manages gh and checks the network.',
         toolsTitle: 'Video tools',
-        toolsIntro: 'ffmpeg and ffprobe: download the managed build (about 110 MB, resumes after an interruption) or use the copies on PATH; the managed build wins.',
         toolsNotFound: 'not found',
         toolsManaged: 'managed',
         toolsSystem: 'system PATH',
@@ -662,9 +663,17 @@ window.__ModuleLoader__.load({
       return t(key)
     }
 
-    function summaryOf(t, id) {
-      const key = 'summary' + id.charAt(0).toUpperCase() + id.slice(1)
-      return t(key)
+    /** Two directory spellings that name the same place, for the move button. */
+    function samePathDraft(a, b) {
+      const clean = function (value) {
+        return String(value || '').trim().replace(/[\\/]+$/, '').toLowerCase()
+      }
+      return clean(a) === clean(b)
+    }
+
+    /** Absolute on Windows (`C:\x`, `\\host\share`) or POSIX (`/x`). */
+    function looksAbsolute(value) {
+      return /^([A-Za-z]:[\\/]|\\\\|\/)/.test(String(value || '').trim())
     }
 
     function timeLabel(value) {
@@ -955,6 +964,10 @@ window.__ModuleLoader__.load({
       const [tools, setTools] = React.useState(null)
       const [toolsMessage, setToolsMessage] = React.useState('')
       const [toolsBusy, setToolsBusy] = React.useState(false)
+      const [toolsPath, setToolsPath] = React.useState(null)
+      const [toolsPathDraft, setToolsPathDraft] = React.useState(null)
+      const [toolsPathMessage, setToolsPathMessage] = React.useState('')
+      const [toolsPathBusy, setToolsPathBusy] = React.useState(false)
       const mounted = React.useRef(true)
       const buttons = React.useRef({})
 
@@ -966,6 +979,7 @@ window.__ModuleLoader__.load({
         loadAuth()
         loadNetwork()
         loadTools()
+        loadToolsPath()
         return function () {
           mounted.current = false
         }
@@ -1172,6 +1186,50 @@ window.__ModuleLoader__.load({
           })
       }
 
+      function loadToolsPath() {
+        return fetch(TOOLS_API, { credentials: 'same-origin' })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            setToolsPath(body || null)
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setToolsPathMessage(t('toolsPathLoadFailed') + messageOf(error))
+          })
+      }
+
+      /** Move both managed components to `target` and persist it. */
+      function migrateToolsPath(target) {
+        if (toolsPathBusy) return
+        setToolsPathBusy(true)
+        setToolsPathMessage('')
+        fetch(TOOLS_API, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'migrate', path: target }),
+        })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            setToolsPath(body || null)
+            setToolsPathDraft(null)
+            setToolsPathMessage(t('toolsPathSaved'))
+            // Both binary locations changed: the two status panels are stale.
+            loadGithub()
+            loadTools()
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setToolsPathMessage(t('toolsPathFailed') + messageOf(error))
+            loadToolsPath()
+          })
+          .then(function () {
+            if (mounted.current) setToolsPathBusy(false)
+          })
+      }
+
       function downloadTools() {
         if (toolsBusy) return
         setToolsBusy(true)
@@ -1266,7 +1324,6 @@ window.__ModuleLoader__.load({
         return { id: id }
       })
       const current = state ? state.level : ''
-      const currentSummary = current ? summaryOf(t, current) : ''
       const engineCount = state && typeof state.engines === 'number' ? state.engines : 0
       const last = state && state.lastCompact
       const lastText = last && last.at
@@ -1286,7 +1343,6 @@ window.__ModuleLoader__.load({
                 'aria-checked': selected ? 'true' : 'false',
                 tabIndex: selected ? 0 : -1,
                 disabled: busy,
-                title: summaryOf(t, id),
                 ref: function (node) { buttons.current[id] = node },
                 className: 'ct-level' + (selected ? ' ct-level-on' : ''),
                 onClick: function () { select(id) },
@@ -1295,7 +1351,7 @@ window.__ModuleLoader__.load({
               h('strong', null, labelOf(t, id)),
               h('span', null, t('auto') + percent(level.thresholdRatio) + ' · ' + t('retain') + percent(level.retainRatio)))
             })),
-          h('p', { className: 'ct-summary' }, t('currentLabel') + t('sep') + labelOf(t, current) + (currentSummary ? ' — ' + currentSummary : '')),
+          h('p', { className: 'ct-summary' }, t('currentLabel') + t('sep') + labelOf(t, current)),
           h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, message))
         : h('p', { className: 'ct-intro', role: 'status' }, message || t('loading'))
 
@@ -1304,8 +1360,7 @@ window.__ModuleLoader__.load({
       const rulesLimit = rules && typeof rules.maxChars === 'number' ? rules.maxChars : 0
       const rulesPanel = h('section', { className: 'ct-panel' },
         h('div', { className: 'ct-rules-head' },
-          h('h3', null, t('rulesTitle')),
-          h('p', { className: 'ct-note' }, t('rulesIntro'))),
+          h('h3', null, t('rulesTitle'))),
         h('label', { className: 'ct-field' },
           h('span', null, t('rulesLabel')),
           h('textarea', {
@@ -1369,27 +1424,44 @@ window.__ModuleLoader__.load({
           : auth.authenticated
             ? t('ghLoggedIn') + (auth.account || 'GitHub')
             : t('ghNotLoggedIn')
-      const ghLoginVisible = Boolean(login && (login.active || login.state === 'success' || login.state === 'error'))
-      const ghLoginLead = !login
+      // The sign-in block is always rendered: a button that only exists while a
+      // condition holds makes the panel jump. Unusable actions go disabled with
+      // the reason in `title` instead.
+      const loginActive = Boolean(login && login.active)
+      const loginCode = login && login.code ? login.code : ''
+      const loginLead = !login
         ? ''
-        : login.active
-          ? (login.code ? t('ghLoginNote') : (login.note || t('ghLoginStarting')))
-          : login.state === 'success' ? t('ghLoginDone') : t('ghLoginFailed')
-      const ghLoginBlock = ghLoginVisible
-        ? h('div', { className: 'ct-rules-head' },
-          h('p', { className: 'ct-note' }, ghLoginLead),
-          login.active && login.code
-            ? h('div', { className: 'ct-row' },
-              h('code', { className: 'ct-code' }, login.code),
-              h('button', { type: 'button', className: 'ct-save', onClick: copyCode }, t('ghCopy')))
-            : null,
-          login.active
-            ? h('div', { className: 'ct-row' },
-              h('button', { type: 'button', className: 'ct-save', onClick: openDevice }, t('ghOpenDevice')),
-              h('button', { type: 'button', className: 'ct-save', disabled: ghBusy, onClick: cancelLogin }, t('ghCancel')))
-            : null,
-          login.error ? h('p', { className: 'ct-status', role: 'alert' }, login.error) : null)
-        : null
+        : loginActive
+          ? (loginCode ? t('ghLoginWaiting') : (login.note || t('ghLoginStarting')))
+          : login.state === 'success' ? t('ghLoginDone') : login.state === 'error' ? t('ghLoginFailed') : ''
+      const loginInactiveTitle = loginActive ? '' : t('ghLoginInactive')
+      const ghLoginBlock = h('div', { className: 'ct-rules-head' },
+        h('p', { className: 'ct-note' }, loginLead),
+        h('div', { className: 'ct-row' },
+          h('code', { className: 'ct-code' }, loginCode || '—'),
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: ghBusy || !loginCode,
+            title: loginCode ? '' : t('ghLoginInactive'),
+            onClick: copyCode,
+          }, t('ghCopy'))),
+        h('div', { className: 'ct-row' },
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: ghBusy || !loginActive,
+            title: loginInactiveTitle,
+            onClick: openDevice,
+          }, t('ghOpenDevice')),
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: ghBusy || !loginActive,
+            title: loginInactiveTitle,
+            onClick: cancelLogin,
+          }, t('ghCancel'))),
+        login && login.error ? h('p', { className: 'ct-status', role: 'alert' }, login.error) : null)
       const networkText = !network
         ? ''
         : network.verdict === 'direct' ? t('ghNetworkDirect')
@@ -1404,7 +1476,6 @@ window.__ModuleLoader__.load({
         networkText
           ? h('p', { className: 'ct-note' }, t('ghNetworkLabel') + t('sep') + networkText + (dnsNote ? ' · ' + dnsNote : ''))
           : null,
-        h('p', { className: 'ct-note' }, t('ghToolNote')),
         h('div', { className: 'ct-row' },
           h('button', {
             type: 'button',
@@ -1414,8 +1485,7 @@ window.__ModuleLoader__.load({
 
       const ghPanel = h('section', { className: 'ct-panel' },
         h('div', { className: 'ct-rules-head' },
-          h('h3', null, t('ghTitle')),
-          h('p', { className: 'ct-note' }, t('ghIntro'))),
+          h('h3', null, t('ghTitle'))),
         h('div', { className: 'ct-row' },
           h('span', { className: 'ct-note' }, ghStateText),
           ghItem && ghItem.version ? h('span', { className: 'ct-note' }, 'v' + ghItem.version) : null,
@@ -1480,8 +1550,7 @@ window.__ModuleLoader__.load({
       }
       const toolsPanel = h('section', { className: 'ct-panel' },
         h('div', { className: 'ct-rules-head' },
-          h('h3', null, t('toolsTitle')),
-          h('p', { className: 'ct-note' }, t('toolsIntro'))),
+          h('h3', null, t('toolsTitle'))),
         h('div', { className: 'ct-tools-list' },
           toolRow('ffmpeg', toolsItem ? toolsItem.ffmpeg : null),
           toolRow('ffprobe', toolsItem ? toolsItem.ffprobe : null)),
@@ -1505,12 +1574,61 @@ window.__ModuleLoader__.load({
           : null,
         toolsMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsMessage) : null)
 
+      // One download root for both managed tools. The move button is always
+      // rendered and disabled while a download runs or the draft is unchanged.
+      const toolsPathCurrent = toolsPath && toolsPath.path ? String(toolsPath.path) : ''
+      const toolsPathDefault = toolsPath && toolsPath.defaultPath ? String(toolsPath.defaultPath) : ''
+      const toolsPathDraftValue = toolsPathDraft === null ? toolsPathCurrent : toolsPathDraft
+      const toolsPathClean = toolsPathDraftValue.trim()
+      const toolsPathRunningNow = Boolean(toolsPath && toolsPath.running && (toolsPath.running.gh || toolsPath.running.ffmpeg))
+      const toolsPathInvalid = toolsPathClean.length > 0 && !looksAbsolute(toolsPathClean)
+      const toolsPathChanged = toolsPathCurrent !== '' && !samePathDraft(toolsPathClean, toolsPathCurrent)
+      const toolsPathDisabled = toolsPathBusy || toolsPathRunningNow || !toolsPathCurrent || !toolsPathClean || toolsPathInvalid || !toolsPathChanged
+      const toolsPathInputTitle = toolsPathRunningNow
+        ? t('toolsPathRunning')
+        : toolsPathInvalid ? t('toolsPathInvalid') : ''
+      const toolsPathPanel = h('section', { className: 'ct-panel' },
+        h('div', { className: 'ct-rules-head' },
+          h('h3', null, t('toolsPathTitle'))),
+        h('label', { className: 'ct-field' },
+          h('span', null, t('toolsPathLabel')),
+          h('div', { className: 'ct-row' },
+            h('input', {
+              className: 'ct-input',
+              type: 'text',
+              spellCheck: false,
+              value: toolsPathDraftValue,
+              placeholder: toolsPathDefault,
+              disabled: toolsPathBusy,
+              onChange: function (event) { setToolsPathDraft(event.target.value) },
+            }))),
+        h('div', { className: 'ct-row' },
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: toolsPathDisabled,
+            title: toolsPathInputTitle,
+            onClick: function () { migrateToolsPath(toolsPathClean) },
+          }, toolsPathBusy ? t('rulesSaving') : t('toolsPathSave')),
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: toolsPathBusy || toolsPathRunningNow || !toolsPathDefault || samePathDraft(toolsPathCurrent, toolsPathDefault),
+            title: toolsPathRunningNow ? t('toolsPathRunning') : '',
+            onClick: function () { migrateToolsPath(toolsPathDefault) },
+          }, t('toolsPathReset')),
+          h('span', { className: 'ct-note' }, toolsPathCurrent
+            ? t('toolsPathCurrent') + t('sep') + toolsPathCurrent
+            : (toolsPathMessage ? '' : t('loading')))),
+        toolsPathRunningNow ? h('p', { className: 'ct-note' }, t('toolsPathRunning')) : null,
+        h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsPathMessage))
+
       return h('section', { className: 'ct-page' },
         h('header', { className: 'ct-head' },
-          h('h2', null, t('title')),
-          h('p', { className: 'ct-intro' }, t('intro'))),
+          h('h2', null, t('title'))),
         panel,
         rulesPanel,
+        toolsPathPanel,
         ghPanel,
         toolsPanel,
         state
@@ -1519,8 +1637,7 @@ window.__ModuleLoader__.load({
             h('span', null, t('lastCompact') + t('sep') + lastText),
             state.paths && state.paths.settings
               ? h('span', null, t('settingsPath') + t('sep') + state.paths.settings)
-              : null,
-            h('span', null, t('smallWindow')))
+              : null)
           : null)
     }
 

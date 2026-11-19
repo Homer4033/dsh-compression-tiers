@@ -213,25 +213,28 @@ test('the client factory registers a localized settings section', () => {
   assert.deepEqual(Object.keys(dictionaries.dicts).sort(), ['en', 'zh'])
   for (const locale of ['zh', 'en']) {
     const keys = Object.keys(dictionaries.dicts[locale])
-    assert.ok(keys.includes('title'))
-    assert.ok(keys.includes('levelGentle'))
-    assert.ok(keys.includes('summaryMax'))
-    assert.ok(keys.includes('rulesTitle'))
-    assert.ok(keys.includes('rulesSave'))
-    assert.ok(keys.includes('rulesMissing'))
-    assert.ok(keys.includes('ghTitle'))
-    assert.ok(keys.includes('ghDownload'))
-    assert.ok(keys.includes('ghLogin'))
-    assert.ok(keys.includes('ghToolNote'))
-    assert.ok(keys.includes('toolsTitle'))
-    assert.ok(keys.includes('toolsDownloading'))
-    assert.ok(keys.includes('toolsUnsupported'))
-    assert.ok(keys.includes('repoSelectLabel'))
-    assert.ok(keys.includes('repoNone'))
-    assert.ok(keys.includes('repoTitle'))
+    for (const key of [
+      'title', 'levelGentle', 'currentLabel', 'rulesTitle', 'rulesSave', 'rulesMissing',
+      'toolsPathTitle', 'toolsPathSave', 'toolsPathReset', 'toolsPathRunning',
+      'ghTitle', 'ghDownload', 'ghLogin', 'ghCopy', 'ghOpenDevice', 'ghCancel',
+      'toolsTitle', 'toolsDownloading', 'toolsUnsupported',
+      'repoSelectLabel', 'repoNone', 'repoTitle',
+    ]) {
+      assert.ok(keys.includes(key), `${locale} is missing ${key}`)
+    }
+    // The settings page carries controls, state and errors only; teaching copy
+    // lives in AGENTS.md, so these keys must stay gone.
+    for (const key of ['intro', 'smallWindow', 'summaryMax', 'summaryGentle', 'rulesIntro', 'ghIntro', 'toolsIntro', 'ghToolNote', 'ghLoginNote']) {
+      assert.equal(keys.includes(key), false, `${locale} still carries ${key}`)
+    }
     // The sidebar repository panel is gone; its copy must not linger.
     assert.equal(keys.filter((key) => key.startsWith('repos')).length, 0)
   }
+  assert.deepEqual(
+    Object.keys(dictionaries.dicts.zh).sort(),
+    Object.keys(dictionaries.dicts.en).sort(),
+    'both locales carry the same keys',
+  )
 })
 
 test('the settings page renders five tier buttons and the global rules editor', () => {
@@ -449,4 +452,108 @@ test('an unbound session shows the unbound label inside the pill', () => {
   assert.equal(pill.props['data-bound'], 'false')
   const value = nodes.find((node) => String(node.props.className || '') === 'ct-repo-value')
   assert.equal(textOf(value), 'repoUnbound')
+})
+
+/** The `useState` queue up to the tools-path hooks, all at their initial values. */
+const IDLE_PAGE = [settingsState, '', false, null, '', '', false, null, null, '', false, null, null, '', false]
+
+function buttonByText(nodes, text) {
+  return nodes.filter((node) => node.type === 'button' && textOf(node) === text)
+}
+
+const ghState = (login) => ({
+  gh: {
+    id: 'gh',
+    name: 'GitHub CLI',
+    version: '2.76.2',
+    supported: true,
+    state: 'installed',
+    installed: true,
+    system: false,
+    systemPath: null,
+    binaryPath: 'C:/dsh/compression-tiers/gh/bin/gh.exe',
+    sourceKind: 'managed',
+    received: 0,
+    total: null,
+    percent: null,
+    error: null,
+  },
+  login,
+})
+
+const authState = { available: true, authenticated: false, account: null, path: 'C:/dsh/compression-tiers/gh/bin/gh.exe', version: '2.76.2' }
+
+const pathStatus = {
+  path: 'D:/tools',
+  defaultPath: 'C:/dsh/compression-tiers',
+  isDefault: false,
+  gh: { path: 'D:/tools/gh', exists: true },
+  ffmpeg: { path: 'D:/tools/ffmpeg', exists: true },
+  running: { gh: false, ffmpeg: false },
+}
+
+test('the sign-in buttons are always rendered and disabled while idle', () => {
+  const idle = { active: false, state: 'idle', code: null, url: null, note: '', error: null, startedAt: null }
+  const { nodes } = render([...IDLE_PAGE.slice(0, 7), ghState(idle), authState, '', false])
+  for (const [key, reason] of [['ghCopy', 'ghLoginInactive'], ['ghOpenDevice', 'ghLoginInactive'], ['ghCancel', 'ghLoginInactive']]) {
+    const buttons = buttonByText(nodes, key)
+    assert.equal(buttons.length, 1, `${key} must always be rendered`)
+    assert.equal(buttons[0].props.disabled, true)
+    assert.equal(buttons[0].props.title, reason)
+  }
+  const code = nodes.find((node) => node.type === 'code')
+  assert.ok(code, 'the code slot is always rendered')
+  assert.equal(textOf(code), '—')
+})
+
+test('a running device flow enables copying the code and cancelling', () => {
+  const active = {
+    active: true,
+    state: 'waiting',
+    code: 'ABCD-1234',
+    url: 'https://github.com/login/device',
+    note: 'copy the one-time code',
+    error: null,
+    startedAt: 1,
+  }
+  const { nodes } = render([...IDLE_PAGE.slice(0, 7), ghState(active), authState, '', false])
+  assert.equal(textOf(nodes.find((node) => node.type === 'code')), 'ABCD-1234')
+  for (const key of ['ghCopy', 'ghOpenDevice', 'ghCancel']) {
+    const buttons = buttonByText(nodes, key)
+    assert.equal(buttons.length, 1)
+    assert.equal(buttons[0].props.disabled, false, `${key} is usable during the flow`)
+  }
+})
+
+test('the download-location panel moves both tools and resets to the default', () => {
+  const unchanged = render([...IDLE_PAGE, pathStatus, null, '', false])
+  const input = unchanged.nodes.find((node) => node.type === 'input')
+  assert.ok(input, 'the panel always renders the directory field')
+  assert.equal(input.props.value, 'D:/tools')
+  assert.equal(buttonByText(unchanged.nodes, 'toolsPathSave')[0].props.disabled, true)
+  assert.equal(buttonByText(unchanged.nodes, 'toolsPathReset')[0].props.disabled, false)
+
+  const changed = render([...IDLE_PAGE, pathStatus, 'D:/other-tools', '', false])
+  assert.equal(buttonByText(changed.nodes, 'toolsPathSave')[0].props.disabled, false)
+  assert.equal(changed.nodes.find((node) => node.type === 'input').props.value, 'D:/other-tools')
+
+  const relative = render([...IDLE_PAGE, pathStatus, 'tools', '', false])
+  const save = buttonByText(relative.nodes, 'toolsPathSave')[0]
+  assert.equal(save.props.disabled, true)
+  assert.equal(save.props.title, 'toolsPathInvalid')
+})
+
+test('a running download blocks the location buttons and says why', () => {
+  const running = { ...pathStatus, running: { gh: true, ffmpeg: false } }
+  const { nodes } = render([...IDLE_PAGE, running, null, '', false])
+  assert.equal(buttonByText(nodes, 'toolsPathSave')[0].props.disabled, true)
+  assert.equal(buttonByText(nodes, 'toolsPathReset')[0].props.disabled, true)
+  assert.ok(deepText({ props: { children: nodes } }).includes('toolsPathRunning'))
+})
+
+test('the location panel waits for its status instead of showing a wrong path', () => {
+  const { nodes } = render([...IDLE_PAGE, null, null, '', false])
+  assert.equal(buttonByText(nodes, 'toolsPathSave')[0].props.disabled, true)
+  assert.equal(buttonByText(nodes, 'toolsPathReset')[0].props.disabled, true)
+  assert.equal(nodes.find((node) => node.type === 'input').props.value, '')
 })

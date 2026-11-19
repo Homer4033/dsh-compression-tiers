@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { join } from 'node:path'
 import { DEFAULT_LEVEL, compactLevel } from './levels.js'
 import { normalizeRoutes } from './routes.js'
+import { normalizeToolsPath } from './tools-path.js'
 
 /**
  * Plugin-owned state. The selected tier and the optional per-route overrides
@@ -33,6 +34,9 @@ export function defaultSettings() {
     // Session id → `owner/name` of the online repository that session publishes
     // to. Bound from the session header; the file is the only place it lives.
     sessionRepos: {},
+    // Shared download root for the managed gh and ffmpeg installs. Empty means
+    // `<DSH home>/compression-tiers`, which is where earlier versions put them.
+    toolsPath: '',
   }
 }
 
@@ -76,6 +80,9 @@ export function normalizeSettings(value) {
     proxy: text(github.proxy, base.github.proxy),
   }
   next.sessionRepos = normalizeSessionRepos(next.sessionRepos)
+  // A relative or unparsable toolsPath would resolve against the process CWD;
+  // drop it so the shared root falls back to the default directory.
+  next.toolsPath = normalizeToolsPath(next.toolsPath)
   return next
 }
 

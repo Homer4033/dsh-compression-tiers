@@ -6,11 +6,12 @@ import { attachContextMeter, compactionWindowNote, contextReportText, readContex
 import { attachCompactQueue, COMPACT_TOOL_NAME, resolveCompaction } from './src/manual-compact.js'
 import { readSettings, writeSettings, normalizeRepoName } from './src/store.js'
 import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/rules.js'
-import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, listRepos, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
+import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghDownloadRunning, ghStatus, githubLoginStatus, listRepos, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
 import { networkReport, detectProxy } from './src/publish.js'
-import { ffmpegStatus, prependFfmpegPath, startFfmpegDownload } from './src/ffmpeg.js'
+import { ffmpegDownloadRunning, ffmpegStatus, prependFfmpegPath, startFfmpegDownload } from './src/ffmpeg.js'
+import { migrateTools, parseToolsPath, resolveToolsPath, toolsStatus } from './src/tools-path.js'
 import { pushFlow, pushReportText, resolvePushCwd } from './src/push-flow.js'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
 import { errorStatus, guard, queryParam, readBody, sendJson } from './src/http.js'
@@ -35,6 +36,43 @@ const PLUGIN_ROOT = dirname(fileURLToPath(import.meta.url))
 
 function githubSettings() {
   return readSettings(homeDir()).settings.github
+}
+
+/** The one download root both managed tools install below. */
+function toolsRoot() {
+  return resolveToolsPath(homeDir(), readSettings(homeDir()).settings)
+}
+
+/** Whether either managed install is in flight (migration refuses to move one). */
+function toolsRunning(root = toolsRoot()) {
+  return { gh: ghDownloadRunning(root), ffmpeg: ffmpegDownloadRunning(root) }
+}
+
+/**
+ * After the managed tools move, the PATH entries for the old `bin` directories
+ * must go as well; otherwise the process keeps resolving the binaries that are
+ * no longer there.
+ */
+function repointToolsPath(previous, target) {
+  const separator = process.platform === 'win32' ? ';' : ':'
+  const stale = new Set([
+    join(previous, 'gh', 'bin'),
+    join(previous, 'ffmpeg', 'bin'),
+  ])
+  process.env.PATH = String(process.env.PATH || '')
+    .split(separator)
+    .filter((dir) => dir && !stale.has(dir))
+    .join(separator)
+  try {
+    prependGhPath(target)
+  } catch (error) {
+    trace('gh:path-failed', error instanceof Error ? error.message : String(error))
+  }
+  try {
+    prependFfmpegPath(target)
+  } catch (error) {
+    trace('ffmpeg:path-failed', error instanceof Error ? error.message : String(error))
+  }
 }
 
 /** The directory the calling session lives in; empty when unavailable. */
@@ -185,7 +223,7 @@ function statePayload(ctx) {
     modelRoutes: state.settings.modelRoutes,
     routeLines: formatRouteLines(state.settings.modelRoutes),
     lastCompact: state.settings.lastCompact,
-    paths: { settings: state.paths.settings },
+    paths: { settings: state.paths.settings, tools: resolveToolsPath(homeDir(), state.settings) },
     github: state.settings.github,
     ...engineSummary(ctx),
   }
@@ -215,14 +253,14 @@ export function apply(ctx) {
   // The official change-request bundle shells out to `gh`; a managed copy goes
   // first on PATH so the bundle finds the version this page installed.
   try {
-    prependGhPath(homeDir())
+    prependGhPath(toolsRoot())
   } catch (error) {
     trace('gh:path-failed', error instanceof Error ? error.message : String(error))
   }
   // ffmpeg/ffprobe: the managed copy, when present, also goes first on PATH so
   // video tooling in this process finds the version this page installed.
   try {
-    if (prependFfmpegPath(homeDir())) trace('ffmpeg:path-ready', '')
+    if (prependFfmpegPath(toolsRoot())) trace('ffmpeg:path-ready', '')
   } catch (error) {
     trace('ffmpeg:path-failed', error instanceof Error ? error.message : String(error))
   }
@@ -465,18 +503,18 @@ export function apply(ctx) {
       if (guard(child, req, res)) return
       try {
         if (req.method === 'GET') {
-          sendJson(res, 200, { ok: true, gh: ghStatus(homeDir()), login: githubLoginStatus() })
+          sendJson(res, 200, { ok: true, gh: ghStatus(toolsRoot()), login: githubLoginStatus() })
           return
         }
         if (req.method === 'POST') {
           const body = await readBody(req)
           const action = typeof body.action === 'string' ? body.action : ''
           if (action === 'download') {
-            sendJson(res, 202, { ok: true, gh: startGhDownload(homeDir()) })
+            sendJson(res, 202, { ok: true, gh: startGhDownload(toolsRoot()) })
             return
           }
           if (action === 'login') {
-            sendJson(res, 200, { ok: true, ...beginGithubLogin(homeDir()) })
+            sendJson(res, 200, { ok: true, ...beginGithubLogin(toolsRoot()) })
             return
           }
           if (action === 'cancel') {
@@ -499,7 +537,7 @@ export function apply(ctx) {
         return
       }
       try {
-        sendJson(res, 200, { ok: true, auth: await ghAuthStatus(homeDir()) })
+        sendJson(res, 200, { ok: true, auth: await ghAuthStatus(toolsRoot()) })
       } catch (error) {
         sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
       }
@@ -533,7 +571,7 @@ export function apply(ctx) {
       try {
         const settings = githubSettings()
         const detected = await detectProxy({ cwd: PLUGIN_ROOT, override: settings.proxy })
-        const listed = await listRepos(homeDir(), { proxy: detected.proxy })
+        const listed = await listRepos(toolsRoot(), { proxy: detected.proxy })
         sendJson(res, 200, { ok: listed.ok, repos: listed.repos, error: listed.error, detail: listed.detail })
       } catch (error) {
         sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
@@ -584,19 +622,68 @@ export function apply(ctx) {
       }
     }, 'github binding route')
 
+    // Shared download location: one root for both managed tools, and the one
+    // place that moves them. A running download blocks the move (409), and a
+    // component already sitting at the target counts as migrated so a failed
+    // run can be retried.
+    register('/compression-tiers/api/tools', async (req, res) => {
+      if (guard(child, req, res)) return
+      try {
+        const status = () => toolsStatus(homeDir(), readSettings(homeDir()).settings, { running: toolsRunning() })
+        if (req.method === 'GET') {
+          sendJson(res, 200, { ok: true, ...status() })
+          return
+        }
+        if (req.method === 'POST') {
+          const body = await readBody(req)
+          const action = typeof body.action === 'string' ? body.action : ''
+          if (action !== 'migrate') {
+            sendJson(res, 400, { error: 'unknown action: migrate' })
+            return
+          }
+          const settings = readSettings(homeDir()).settings
+          let target
+          try {
+            target = parseToolsPath(body.path)
+          } catch (error) {
+            sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) })
+            return
+          }
+          let report
+          try {
+            report = migrateTools({ home: homeDir(), settings, target, running: toolsRunning() })
+          } catch (error) {
+            sendJson(res, errorStatus(error, 500), {
+              error: error instanceof Error ? error.message : String(error),
+              report: error && error.report ? error.report : null,
+            })
+            return
+          }
+          writeSettings(homeDir(), { settings: { toolsPath: target } })
+          // PATH still points at the old directories; move it with the files.
+          repointToolsPath(report.from, report.to)
+          sendJson(res, 200, { ok: true, ...status(), report })
+          return
+        }
+        sendJson(res, 405, { error: 'GET or POST' })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'tools path route')
+
     // Managed ffmpeg + ffprobe: detection, resumable download, atomic install.
     register('/compression-tiers/api/ffmpeg', async (req, res) => {
       if (guard(child, req, res)) return
       try {
         if (req.method === 'GET') {
-          sendJson(res, 200, { ok: true, ...(await ffmpegStatus(homeDir())) })
+          sendJson(res, 200, { ok: true, ...(await ffmpegStatus(toolsRoot())) })
           return
         }
         if (req.method === 'POST') {
           const body = await readBody(req)
           const action = typeof body.action === 'string' ? body.action : ''
           if (action === 'download') {
-            sendJson(res, 202, { ok: true, ...(await startFfmpegDownload(homeDir())) })
+            sendJson(res, 202, { ok: true, ...(await startFfmpegDownload(toolsRoot())) })
             return
           }
           sendJson(res, 400, { error: 'unknown action: download' })

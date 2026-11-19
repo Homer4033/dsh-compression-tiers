@@ -11,8 +11,10 @@ import { proxyEnv } from './publish.js'
  * plugin can install a pinned managed copy, find one already on PATH, and run
  * the `gh auth login --web` device flow from the settings page.
  *
- * State lives in the plugin directory so it survives profile rebuilds:
- * `<DSH home>/compression-tiers/gh/{bin,download,src}`.
+ * The first argument of every file-touching export is the shared download root
+ * (`settings.toolsPath`, see `src/tools-path.js`), not the DSH home: the
+ * managed copy lives in `<toolsPath>/gh/{bin,download,src}` next to the managed
+ * ffmpeg, so both tools move together.
  */
 
 /**
@@ -44,12 +46,13 @@ const GH_ASSETS = {
   'linux-arm64': { file: `gh_${GH_VERSION}_linux_arm64.tar.gz`, kind: 'tar.gz' },
 }
 
-export function ghRoot(home) {
-  return join(home, 'compression-tiers', 'gh')
+/** `<toolsPath>/gh`: the managed component's own directory. */
+export function ghRoot(root) {
+  return join(root, 'gh')
 }
 
-export function ghBinDir(home) {
-  return join(ghRoot(home), 'bin')
+export function ghBinDir(root) {
+  return join(ghRoot(root), 'bin')
 }
 
 export function ghBinaryName(platform = process.platform) {
@@ -63,12 +66,12 @@ export function ghAsset(platform = process.platform, arch = process.arch) {
   return { ...asset, url: `${GH_RELEASE}/${asset.file}` }
 }
 
-function downloadDir(home) {
-  return join(ghRoot(home), 'download')
+function downloadDir(root) {
+  return join(ghRoot(root), 'download')
 }
 
-function partPath(home, asset) {
-  return join(downloadDir(home), `${asset.file}.part`)
+function partPath(root, asset) {
+  return join(downloadDir(root), `${asset.file}.part`)
 }
 
 /** Find an executable on PATH without spawning it. */
@@ -89,33 +92,38 @@ export function systemGh(platform = process.platform, envPath = process.env.PATH
 }
 
 /** The managed binary, then a system one, then null. */
-export function resolveGh(home, platform = process.platform, envPath = process.env.PATH) {
-  const managed = join(ghBinDir(home), ghBinaryName(platform))
+export function resolveGh(root, platform = process.platform, envPath = process.env.PATH) {
+  const managed = join(ghBinDir(root), ghBinaryName(platform))
   if (existsSync(managed)) return managed
   return systemGh(platform, envPath)
 }
 
-/** Live progress for the running download, keyed by home. */
+/** Live progress for the running download, keyed by the shared tools root. */
 const jobs = new Map()
 
-function jobKey(home) {
-  return home
+function jobKey(root) {
+  return root
+}
+
+/** Whether a managed install is in flight; migration refuses to move a live job. */
+export function ghDownloadRunning(root) {
+  return jobs.get(jobKey(root))?.running === true
 }
 
 /**
  * Everything the settings panel needs about the managed component: how far a
  * download got, whether a binary is installed, and what PATH already offers.
  */
-export function ghStatus(home, { platform = process.platform, arch = process.arch, envPath = process.env.PATH } = {}) {
+export function ghStatus(root, { platform = process.platform, arch = process.arch, envPath = process.env.PATH } = {}) {
   const asset = ghAsset(platform, arch)
-  const job = jobs.get(jobKey(home))
-  const bin = join(ghBinDir(home), ghBinaryName(platform))
+  const job = jobs.get(jobKey(root))
+  const bin = join(ghBinDir(root), ghBinaryName(platform))
   const hasBinary = existsSync(bin)
   // A failed job keeps the component "not installed" even if a binary is still
   // on disk: the panel then offers a retry instead of a broken install.
   const installed = hasBinary && !job?.error
   const systemPath = installed ? null : systemGh(platform, envPath)
-  const partBytes = asset && existsSync(partPath(home, asset)) ? statSync(partPath(home, asset)).size : 0
+  const partBytes = asset && existsSync(partPath(root, asset)) ? statSync(partPath(root, asset)).size : 0
   let state = 'missing'
   if (job?.running) state = 'downloading'
   else if (installed) state = 'installed'
@@ -143,7 +151,7 @@ export function ghStatus(home, { platform = process.platform, arch = process.arc
     total,
     percent: total ? Math.min(100, Math.round((received / total) * 100)) : null,
     error: job?.error || null,
-    installDir: ghRoot(home),
+    installDir: ghRoot(root),
   }
 }
 
@@ -276,10 +284,10 @@ export function findBinary(dir, name) {
   return null
 }
 
-function pruneDownload(home) {
-  const staging = join(ghRoot(home), 'src')
+function pruneDownload(root) {
+  const staging = join(ghRoot(root), 'src')
   if (existsSync(staging)) rmSync(staging, { recursive: true, force: true })
-  if (existsSync(downloadDir(home))) rmSync(downloadDir(home), { recursive: true, force: true })
+  if (existsSync(downloadDir(root))) rmSync(downloadDir(root), { recursive: true, force: true })
 }
 
 function stagedPath(destination) {
@@ -363,14 +371,14 @@ async function installBinary(temp, final, platform) {
  * Start the managed download in the background and return the current status
  * immediately: the panel polls {@link ghStatus} for progress and the outcome.
  */
-export function startGhDownload(home, { platform = process.platform, arch = process.arch } = {}) {
+export function startGhDownload(root, { platform = process.platform, arch = process.arch } = {}) {
   const asset = ghAsset(platform, arch)
   if (!asset) throw new Error(`GitHub CLI has no build for ${platform}/${arch}`)
-  const current = jobs.get(jobKey(home))
-  if (current?.running) return ghStatus(home, { platform, arch })
+  const current = jobs.get(jobKey(root))
+  if (current?.running) return ghStatus(root, { platform, arch })
   const job = { running: true, received: 0, total: null, error: null }
-  jobs.set(jobKey(home), job)
-  const target = partPath(home, asset)
+  jobs.set(jobKey(root), job)
+  const target = partPath(root, asset)
   // A stalled connection must not leave the job "downloading" forever.
   const controller = new AbortController()
   let timedOut = false
@@ -389,24 +397,24 @@ export function startGhDownload(home, { platform = process.platform, arch = proc
     },
   }).then(async () => {
     clearTimeout(timer)
-    const archivePath = join(downloadDir(home), asset.file)
+    const archivePath = join(downloadDir(root), asset.file)
     renameSync(target, archivePath)
-    const staging = join(ghRoot(home), 'src')
+    const staging = join(ghRoot(root), 'src')
     await extractArchive(archivePath, staging, asset.kind, platform)
     const binaryName = ghBinaryName(platform)
     const binary = findBinary(staging, binaryName)
     if (!binary) throw new Error(`archive did not contain ${binaryName}`)
-    const binDir = ghBinDir(home)
+    const binDir = ghBinDir(root)
     mkdirSync(binDir, { recursive: true })
     const final = join(binDir, binaryName)
     const temp = stageBinary(binary, final, platform)
     await installBinary(temp, final, platform)
     try {
-      pruneDownload(home)
+      pruneDownload(root)
     } catch {
       // Cleanup is best effort: a leftover archive must not fail the install.
     }
-    prependGhPath(home, platform)
+    prependGhPath(root, platform)
   }).catch((error) => {
     job.error = timedOut
       ? 'download timed out after 10 minutes; the partial file was kept for resume'
@@ -415,15 +423,15 @@ export function startGhDownload(home, { platform = process.platform, arch = proc
     clearTimeout(timer)
     job.running = false
   })
-  return ghStatus(home, { platform, arch })
+  return ghStatus(root, { platform, arch })
 }
 
 /**
  * Put the managed `bin` directory first on PATH so the official change-request
  * bundle finds the managed `gh`. Returns whether any managed binary exists.
  */
-export function prependGhPath(home, platform = process.platform) {
-  const dir = ghBinDir(home)
+export function prependGhPath(root, platform = process.platform) {
+  const dir = ghBinDir(root)
   if (!existsSync(join(dir, ghBinaryName(platform)))) return false
   const current = process.env.PATH || ''
   const separator = platform === 'win32' ? ';' : ':'
@@ -473,8 +481,8 @@ export function parseGhAuthJson(output) {
  * Private repositories need `repo`; a token without it fails at push time with a
  * bare 403, so the panel warns as soon as the state is read.
  */
-export async function ghAuthStatus(home, { platform = process.platform, arch = process.arch, envPath = process.env.PATH } = {}) {
-  const gh = resolveGh(home, platform, envPath)
+export async function ghAuthStatus(root, { platform = process.platform, arch = process.arch, envPath = process.env.PATH } = {}) {
+  const gh = resolveGh(root, platform, envPath)
   if (!gh) return { available: false, authenticated: false, account: null, scopes: [], missingRepoScope: false, path: null, version: null, detail: '', source: 'none' }
   const asJson = await runCommand(gh, ['auth', 'status', '--json', 'hosts'], { timeoutMs: VERIFY_TIMEOUT_MS })
   const version = await runCommand(gh, ['--version'], { timeoutMs: VERIFY_TIMEOUT_MS })
@@ -537,8 +545,8 @@ export function parseRepoList(output) {
  * `gh` inherits the proxy from the environment; a missing login is reported as
  * such instead of an empty list.
  */
-export async function listRepos(home, { limit = 100, proxy = null, platform = process.platform, envPath = process.env.PATH, env = process.env } = {}) {
-  const gh = resolveGh(home, platform, envPath)
+export async function listRepos(root, { limit = 100, proxy = null, platform = process.platform, envPath = process.env.PATH, env = process.env } = {}) {
+  const gh = resolveGh(root, platform, envPath)
   if (!gh) return { ok: false, error: 'gh-not-installed', repos: [], detail: '' }
   const result = await runCommand(gh, [
     'repo', 'list',
@@ -604,12 +612,12 @@ export function cancelGithubLogin() {
  * background: it prints the code, receives Enter so it opens the browser, then
  * polls GitHub. Callers poll {@link githubLoginStatus} for the outcome.
  */
-export function beginGithubLogin(home, { platform = process.platform, envPath = process.env.PATH } = {}) {
+export function beginGithubLogin(root, { platform = process.platform, envPath = process.env.PATH } = {}) {
   const live = loginSession
   if (live && (live.state === 'starting' || live.state === 'waiting')) {
     return { started: false, reused: true, command: live.command, ...loginSnapshot() }
   }
-  const gh = resolveGh(home, platform, envPath)
+  const gh = resolveGh(root, platform, envPath)
   if (!gh) throw new Error('GitHub CLI is not installed yet; download it first')
   const args = ['auth', 'login', '--web', '--hostname', 'github.com', '--git-protocol', 'https']
   const command = `"${gh}" ${args.join(' ')}`

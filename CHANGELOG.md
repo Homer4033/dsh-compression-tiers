@@ -1,6 +1,15 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.6.4`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.7.0`。
+
+## 1.7.0 — 2026-11-19
+
+- **统一下载位置**：`gh` 与 `ffmpeg` / `ffprobe` 不再各自找目录，两套托管文件共用一个根目录 `<toolsPath>`（`gh` 在 `<toolsPath>/gh`，ffmpeg 在 `<toolsPath>/ffmpeg`）。`settings.json` 新增 `toolsPath`；留空即默认 `<DSH home>/compression-tiers`，与 1.6.x 的两个目录完全一致，升级不搬动任何文件。
+- **可迁移**：设置页新增「下载位置」面板（绝对路径输入 + 「迁移」+「恢复默认」）。迁移整体搬两棵目录、写完 `settings.json`、并把本进程 PATH 里的旧 `bin` 目录换成新的。规则：只接受绝对路径；下载进行中返回 409；目标已有同名组件时预检拒绝（什么都不动）；跨卷 `rename` 失败（`EXDEV`）退化为复制后删除；「搬一半失败」可以重试补完。接口 `GET/POST /compression-tiers/api/tools`。
+- **新模块** `src/tools-path.js`：`defaultToolsPath` / `parseToolsPath` / `normalizeToolsPath` / `resolveToolsPath` / `toolsStatus` / `migrateTools`。`src/gh.js` 与 `src/ffmpeg.js` 的首个参数从 DSH home 改为共享根目录，并新增 `ghDownloadRunning` / `ffmpegDownloadRunning` 供迁移前检查。
+- **设置页不再写说明文**：删掉页面 intro、档位点评、规则/GitHub/音视频三个面板的说明段、`ghToolNote` 与设备码操作说明，界面只留控件标签、当前值、路径与错误信息；这类文字写进 `AGENTS.md`（新增第 15 条）。
+- **按钮常显**：设备码「复制验证码」/「打开授权页」/「取消登录」三个按钮不再按条件渲染，空闲时照常显示并置灰，原因写在 `title`（`AGENTS.md` 新增第 16 条）。下载位置的两个按钮同样常显。
+- **测试**：新增 `test/tools-path.test.js`（默认根、绝对路径校验、整体迁移、目标已存在预检、下载中 409、`EXDEV` 回退、半迁移重试）；`test/store.test.js` 覆盖 `toolsPath` 归一化；`test/client.test.js` 覆盖三个常显按钮、下载位置面板的禁用态与「说明段键已删除」；共 131 条。
 
 ## 1.6.4 — 2026-11-19
 

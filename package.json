@@ -1,9 +1,9 @@
 {
   "name": "dsh-harness-toolbox",
-  "version": "1.6.4",
+  "version": "1.7.0",
   "private": false,
   "type": "module",
-  "description": "Five-tier context compression policy for official DeepSeek Harness plus a global rules editor and GitHub publishing: settings page, agent tools (compression_tiers, compression_context, compression_compact, github_push), live occupancy meter, proactive compaction, $DSH_HOME/AGENTS.md, managed gh with device-code login, a per-session online repository binding in the session header, and a resumable managed ffmpeg/ffprobe install.",
+  "description": "Five-tier context compression policy for official DeepSeek Harness plus a global rules editor and GitHub publishing: settings page, agent tools (compression_tiers, compression_context, compression_compact, github_push), live occupancy meter, proactive compaction, $DSH_HOME/AGENTS.md, managed gh with device-code login, a per-session online repository binding in the session header, and a resumable managed ffmpeg/ffprobe install, and one configurable download root for both tools with a whole-directory migration.",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

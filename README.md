@@ -14,6 +14,7 @@
 - [全局规则](#全局规则)
 - [GitHub CLI](#github-cli)
 - [音视频工具](#音视频工具)
+- [下载位置](#下载位置)
 - [五档参数](#五档参数)
 - [智能体工具](#智能体工具)
 - [工作原理](#工作原理)
@@ -24,7 +25,7 @@
 
 ## 这是什么
 
-官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐八件事：
+官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐九件事：
 
 1. **设置页**：`设置 → 上下文压缩`，五个按钮直接切档，显示自动触发比例与逐字保留比例。
 2. **引擎同步**：选中的档位立即写入每个已挂载的 Agent 预设压缩引擎（官方组合里真正运行的引擎在预设隔离域，家庭补丁碰不到）。
@@ -34,6 +35,7 @@
 6. **发布闭环**：`github_push` 工具让智能体把当前工作区发出去：先体检网络、扫密钥，再带超时推送并报出仍在本地的东西。
 7. **会话发布仓库**：会话标题旁选择在线仓库，选中的仓库成为该会话 `github_push` 的默认推送目标；只改目标 URL，不克隆、不改工作区。
 8. **音视频工具**：同一页检测 `ffmpeg` / `ffprobe`，可从 gyan.dev 下载托管版（断点续传、自检后原子替换），托管版优先并插到本进程 PATH 最前。
+9. **统一下载位置**：`gh` 与 `ffmpeg` 都装在同一个可配置根目录下（默认 `<DSH home>/compression-tiers`，`<root>/gh` 与 `<root>/ffmpeg`），换盘或换目录时一次性整体迁移两套托管文件。
 
 本包从 `homerdsh-workbench` 的压缩子系统拆出，状态独立、工具名独立，可单独安装；全局规则与 GitHub CLI 面板也由工作台合并而来。
 
@@ -102,7 +104,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 
 官方「变更请求与工作树」bundle（`@deepseek-ai/dsh-experimental-forge-bundle`）靠本机 `gh` 读 PR、检查与评审。设置页的「GitHub CLI」面板负责三件事：
 
-- **检测**：先看托管版 `<DSH home>/compression-tiers/gh/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把它插到宿主进程 PATH 最前面，官方面板随即可用。
+- **检测**：先看托管版 `<toolsPath>/gh/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把它插到宿主进程 PATH 最前面，官方面板随即可用。
 - **下载**：内置固定版本 `gh 2.76.2`（Windows / Linux，x64 / arm64），从 `cli/cli` 官方 release 下载；支持 HTTP Range 断点续传、10 分钟超时、解压后先跑 `gh --version` 探测暂存副本，再原子替换，失败自动回滚旧二进制。
 - **登录**：调 `gh auth login --web` 走设备码流程：页面显示一次性验证码（可复制）、打开授权页、取消；`gh` 子进程在后台轮询，完成后自动刷新成「已登录：账号」。凭据存在 gh 自己的存储里，不写 DSH 数据目录。
 
@@ -144,12 +146,21 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 
 设置页最下方管理 `ffmpeg` 与 `ffprobe`（视频剪辑、转码、读时长与编码）：
 
-- **检测**：先看托管版 `<DSH home>/compression-tiers/ffmpeg/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把该目录插到宿主进程 PATH 最前。面板显示每个工具的版本与路径，来源标为「托管版」或「系统 PATH」。
+- **检测**：先看托管版 `<toolsPath>/ffmpeg/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把该目录插到宿主进程 PATH 最前。面板显示每个工具的版本与路径，来源标为「托管版」或「系统 PATH」。
 - **下载**：Windows 用 gyan.dev 的 `ffmpeg-release-essentials.zip`（约 110 MB，浮动的 release 构建）；HTTP Range 断点续传、20 分钟超时，解压后对两个二进制各跑一次 `-version` 自检，再原子替换 `bin` 目录，失败回滚旧版本。
 - **接口**：`GET /compression-tiers/api/ffmpeg` 读状态（含下载进度），`POST` `{"action":"download"}` 启动后台下载；页面在下载期间轮询进度条。
 - **边界**：托管版只覆盖 Windows；Linux / macOS 没有托管源，面板只显示 PATH 检测结果。下载源是当前 release 而非固定版本，钉住的只有 URL 与自检。
 
 > 与 `gh` 的管理方式一致：不写系统环境变量，只在本进程 PATH 前插；未完成或失败的下载保留 `.part` 文件，重试时续传。
+
+## 下载位置
+
+`gh` 与 `ffmpeg` 共用同一个下载根目录，设置页「下载位置」一栏就是它：
+
+- **默认**：`<DSH home>/compression-tiers`。`gh` 在 `<root>/gh`，`ffmpeg` / `ffprobe` 在 `<root>/ffmpeg`；这与 1.6.x 的两个目录完全一致，升级不会搬动任何文件。
+- **迁移**：填一个绝对路径再点「迁移」，两套托管目录一起搬过去并写进 `settings.json` 的 `toolsPath`；同步清掉本进程 PATH 里旧目录的条目，再前插新目录。
+- **规则**：只接受绝对路径（相对路径会随进程工作目录漂移，直接拒绝）；下载进行中返回 409；目标里已有同名组件时先拒绝、什么都不动；跨卷 `rename` 失败（`EXDEV`）时退化为复制后删除；已搬过去一半的目录允许重试补完。
+- **接口**：`GET /compression-tiers/api/tools` 读状态（当前/默认目录、两个组件是否存在、是否有下载在跑），`POST` `{"action":"migrate","path":"D:\\tools"}` 执行迁移；与其它设置路由一样走同源校验。
 
 ## 五档参数
 
@@ -195,7 +206,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 - 对预设结构的访问是防御式的：DSH 升级改了私有结构时，插件放弃更新并保留官方默认，而不是让预设激活失败。
 - 设置路由走官方 `webServer`，并用 `connection.requestRejection` 做同源与浏览器认证；拿不到校验服务时 fail closed。
 - 全局规则没有第二份状态：`<DSH home>/AGENTS.md` 本身就是唯一事实来源，插件只负责原子写入和提示摘要；文件删掉等于没有规则。
-- GitHub CLI 的托管副本与下载暂存放在插件目录 `<DSH home>/compression-tiers/gh`，与工作台的 `homerdsh/components` 互不干扰；PATH 前插只影响本进程，不改系统环境变量。ffmpeg / ffprobe 的托管副本同理放在 `<DSH home>/compression-tiers/ffmpeg`。
+- GitHub CLI 与 ffmpeg / ffprobe 的托管副本都放在同一个下载根目录下（`settings.json` 的 `toolsPath`，默认 `<DSH home>/compression-tiers`，两个组件各占 `<root>/gh` 与 `<root>/ffmpeg`），与工作台的 `homerdsh/components` 互不干扰；PATH 前插只影响本进程，不改系统环境变量。
 - 会话发布仓库只是 `settings.json` 里的一张 `sessionRepos` 表（会话 id → `owner/name`），不是新的事实来源；删掉条目即回到 `github.remote`。
 - 状态文件与引擎都是可重建的：删掉设置文件后，下次激活会重新沿用当前引擎策略。
 
@@ -227,7 +238,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 ## 开发
 
 ```bash
-npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、发布流程、ffmpeg、会话绑定、manifest 规范
+npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、发布流程、ffmpeg、下载位置、会话绑定、manifest 规范
 node --check index.js
 ```
 
@@ -244,6 +255,7 @@ src/store.js          状态文件读写（JSON 与原子文本写入）
 src/rules.js          全局规则文件：路径、读取、校验、原子写入、提示摘要
 src/gh.js             GitHub CLI：托管下载（断点续传/回滚）、PATH 检测、设备码登录、仓库列表
 src/ffmpeg.js         ffmpeg / ffprobe：PATH 检测、托管下载（续传、自检、原子替换）
+src/tools-path.js     统一下载根目录：默认值、绝对路径校验、整体迁移（跨卷回退）
 src/publish.js        网络体检、仓库快照、带超时的 push、建仓校验、密钥扫描
 src/push-flow.js      发布流程：目录选择 → 代理 → 密钥扫描 → push → 报告（设置页与 github_push 共用）
 src/routes.js         按路由覆盖解析

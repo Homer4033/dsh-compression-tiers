@@ -115,6 +115,22 @@ test('writeJson is a thin atomic text write', () => {
   }
 })
 
+test('the shared download root is persisted and a relative one is dropped', () => {
+  const home = tempHome()
+  try {
+    assert.equal(readSettings(home).settings.toolsPath, '')
+    const saved = writeSettings(home, { settings: { toolsPath: join(home, 'shared-tools') } })
+    assert.equal(saved.settings.toolsPath, join(home, 'shared-tools'))
+    assert.equal(readSettings(home).settings.toolsPath, join(home, 'shared-tools'))
+    // A hand-edited relative path would resolve against the process CWD.
+    const dropped = writeSettings(home, { settings: { toolsPath: 'shared-tools' } })
+    assert.equal(dropped.settings.toolsPath, '')
+    assert.equal(readFileSync(settingsPaths(home).settings, 'utf8').includes('shared-tools"'), false)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
 test('session repository bindings are normalized and invalid entries dropped', () => {
   const home = tempHome()
   try {

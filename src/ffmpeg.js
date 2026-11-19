@@ -8,9 +8,9 @@ import { downloadWithResume, extractArchive, findBinary, runCommand } from './gh
  * The tools are wanted by video work (ffprobe reads durations and codecs,
  * ffmpeg cuts and transcodes), but a "please install ffmpeg and add it to PATH"
  * note costs more time than the install. This module detects a PATH copy, keeps
- * a managed copy in `<DSH home>/compression-tiers/ffmpeg/bin`, and downloads the
- * release build with HTTP Range resume so an interrupted 110 MB download
- * continues instead of restarting.
+ * a managed copy in `<toolsPath>/ffmpeg/bin` next to the managed `gh`, and
+ * downloads the release build with HTTP Range resume so an interrupted 110 MB
+ * download continues instead of restarting.
  *
  * The archive is a floating "release essentials" build rather than a pinned
  * version: gyan.dev only serves the current release at a stable URL, so the
@@ -32,13 +32,13 @@ const SOURCES = {
   },
 }
 
-/** Where managed copies, downloads and the extracted tree live. */
-export function ffmpegRoot(home) {
-  return join(home, 'compression-tiers', 'ffmpeg')
+/** `<toolsPath>/ffmpeg`: the managed component's own directory. */
+export function ffmpegRoot(root) {
+  return join(root, 'ffmpeg')
 }
 
-export function ffmpegBinDir(home) {
-  return join(ffmpegRoot(home), 'bin')
+export function ffmpegBinDir(root) {
+  return join(ffmpegRoot(root), 'bin')
 }
 
 export function ffmpegSource(platform = process.platform) {
@@ -62,9 +62,9 @@ export function systemTool(name, platform = process.platform, envPath = process.
 }
 
 /** Managed copy first, then PATH: the same precedence the managed `gh` uses. */
-export function resolveTool(home, name, { platform = process.platform, envPath = process.env.PATH } = {}) {
+export function resolveTool(root, name, { platform = process.platform, envPath = process.env.PATH } = {}) {
   const source = ffmpegSource(platform)
-  const managed = source ? join(ffmpegBinDir(home), source.binaries[name]) : null
+  const managed = source ? join(ffmpegBinDir(root), source.binaries[name]) : null
   if (managed) {
     try {
       if (existsSync(managed) && statSync(managed).isFile()) return { path: managed, managed: true }
@@ -104,32 +104,37 @@ async function toolVersion(path, { run = runCommand, timeoutMs = VERIFY_TIMEOUT_
 
 const jobs = new Map()
 
-function jobKey(home) {
-  return join(ffmpegRoot(home))
+function jobKey(root) {
+  return join(ffmpegRoot(root))
 }
 
-function jobFor(home) {
-  return jobs.get(jobKey(home)) || null
+function jobFor(root) {
+  return jobs.get(jobKey(root)) || null
+}
+
+/** Whether a managed ffmpeg install is in flight; migration refuses to move it. */
+export function ffmpegDownloadRunning(root) {
+  return jobFor(root)?.running === true
 }
 
 /**
  * What the page shows: whether the tools are usable, where they came from, and
  * the state of the last managed download.
  */
-export async function ffmpegStatus(home, {
+export async function ffmpegStatus(root, {
   platform = process.platform,
   arch = process.arch,
   envPath = process.env.PATH,
   run = runCommand,
 } = {}) {
   const source = ffmpegSource(platform)
-  const ffmpeg = resolveTool(home, 'ffmpeg', { platform, envPath })
-  const ffprobe = resolveTool(home, 'ffprobe', { platform, envPath })
+  const ffmpeg = resolveTool(root, 'ffmpeg', { platform, envPath })
+  const ffprobe = resolveTool(root, 'ffprobe', { platform, envPath })
   const [ffmpegVersion, ffprobeVersion] = await Promise.all([
     ffmpeg ? toolVersion(ffmpeg.path, { run }) : null,
     ffprobe ? toolVersion(ffprobe.path, { run }) : null,
   ])
-  const job = jobFor(home)
+  const job = jobFor(root)
   const installed = Boolean(ffmpeg && ffprobe)
   return {
     // The host platform either has a managed source or the tools must come from PATH.
@@ -150,8 +155,8 @@ export async function ffmpegStatus(home, {
   }
 }
 
-function prune(home) {
-  for (const dir of [join(ffmpegRoot(home), 'src'), join(ffmpegRoot(home), 'download')]) {
+function prune(root) {
+  for (const dir of [join(ffmpegRoot(root), 'src'), join(ffmpegRoot(root), 'download')]) {
     try {
       if (existsSync(dir)) rmSync(dir, { recursive: true, force: true })
     } catch {
@@ -164,8 +169,8 @@ function prune(home) {
  * Move the staged `bin` directory into place. The previous directory is kept
  * until the new binaries answer `-version`, then removed.
  */
-async function swapBinDir(home, stagedBin, platform) {
-  const binDir = ffmpegBinDir(home)
+async function swapBinDir(root, stagedBin, platform) {
+  const binDir = ffmpegBinDir(root)
   const backup = `${binDir}.old-${process.pid}-${Date.now()}`
   let moved = false
   try {
@@ -199,10 +204,10 @@ async function swapBinDir(home, stagedBin, platform) {
  * Download, extract and install in the background; return the current status
  * at once. The page polls {@link ffmpegStatus} for progress and the outcome.
  */
-export function startFfmpegDownload(home, { platform = process.platform, arch = process.arch } = {}) {
+export function startFfmpegDownload(root, { platform = process.platform, arch = process.arch } = {}) {
   const source = ffmpegSource(platform)
   if (!source) throw new Error(`no managed ffmpeg build for ${platform}/${arch}; install it on PATH instead`)
-  const key = jobKey(home)
+  const key = jobKey(root)
   const current = jobs.get(key)
   if (current?.running) return current.status()
   const job = {
@@ -210,10 +215,10 @@ export function startFfmpegDownload(home, { platform = process.platform, arch = 
     received: 0,
     total: null,
     error: null,
-    status: () => ffmpegStatus(home, { platform, arch }),
+    status: () => ffmpegStatus(root, { platform, arch }),
   }
   jobs.set(key, job)
-  const downloadDir = join(ffmpegRoot(home), 'download')
+  const downloadDir = join(ffmpegRoot(root), 'download')
   const part = join(downloadDir, `${source.file}.part`)
   const controller = new AbortController()
   let timedOut = false
@@ -236,9 +241,9 @@ export function startFfmpegDownload(home, { platform = process.platform, arch = 
     })
     const archive = join(downloadDir, source.file)
     renameSync(part, archive)
-    const staging = join(ffmpegRoot(home), 'src')
+    const staging = join(ffmpegRoot(root), 'src')
     await extractArchive(archive, staging, source.kind, platform)
-    const stagedBin = join(ffmpegRoot(home), 'staged-bin')
+    const stagedBin = join(ffmpegRoot(root), 'staged-bin')
     rmSync(stagedBin, { recursive: true, force: true })
     mkdirSync(stagedBin, { recursive: true })
     for (const [name, file] of Object.entries(source.binaries)) {
@@ -252,9 +257,9 @@ export function startFfmpegDownload(home, { platform = process.platform, arch = 
         throw new Error(`${name} failed its probe before install: ${`${check.stderr}${check.stdout}`.trim().slice(-300) || `exit ${check.code}`}`)
       }
     }
-    await swapBinDir(home, stagedBin, platform)
-    prune(home)
-    prependFfmpegPath(home, platform)
+    await swapBinDir(root, stagedBin, platform)
+    prune(root)
+    prependFfmpegPath(root, platform)
   })().catch((error) => {
     job.error = timedOut
       ? 'download timed out after 20 minutes; the partial file was kept for resume'
@@ -267,10 +272,10 @@ export function startFfmpegDownload(home, { platform = process.platform, arch = 
 }
 
 /** Put the managed `bin` directory first on PATH; true when both tools exist. */
-export function prependFfmpegPath(home, platform = process.platform) {
+export function prependFfmpegPath(root, platform = process.platform) {
   const source = ffmpegSource(platform)
   if (!source) return false
-  const dir = ffmpegBinDir(home)
+  const dir = ffmpegBinDir(root)
   for (const file of Object.values(source.binaries)) {
     if (!existsSync(join(dir, file))) return false
   }
