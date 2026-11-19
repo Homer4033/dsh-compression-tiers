@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: 'dsh-compression-tiers',
+  id: 'dsh-harness-toolbox',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -104,6 +104,7 @@ window.__ModuleLoader__.load({
         toolsNotFound: '未找到',
         toolsManaged: '托管版',
         toolsSystem: '系统 PATH',
+        toolsLoading: '读取中…',
         toolsInstalled: '已安装',
         toolsInstall: '下载安装',
         toolsContinue: '继续下载',
@@ -213,6 +214,7 @@ window.__ModuleLoader__.load({
         toolsNotFound: 'not found',
         toolsManaged: 'managed',
         toolsSystem: 'system PATH',
+        toolsLoading: 'Loading…',
         toolsInstalled: 'Installed',
         toolsInstall: 'Download and install',
         toolsContinue: 'Resume download',
@@ -1195,15 +1197,17 @@ window.__ModuleLoader__.load({
       const toolsSupported = toolsItem ? toolsItem.supported !== false : false
       const toolsRunningNow = toolsDownload ? toolsDownload.running === true : false
       const toolsInstalled = toolsItem ? toolsItem.state === 'installed' : false
-      const toolsButton = !toolsItem || !toolsSupported
-        ? t('toolsUnsupported')
-        : toolsRunningNow
-          ? t('toolsDownloading') + (toolsDownload.percent == null ? '' : toolsDownload.percent + '%')
-          : toolsInstalled
-            ? t('toolsInstalled')
-            : toolsDownload && toolsDownload.error
-              ? t('toolsRetry')
-              : toolsItem.state === 'missing' ? t('toolsInstall') : t('toolsContinue')
+      const toolsButton = !toolsItem
+        ? t('toolsLoading')
+        : !toolsSupported
+          ? t('toolsUnsupported')
+          : toolsRunningNow
+            ? t('toolsDownloading') + (toolsDownload.percent == null ? '' : toolsDownload.percent + '%')
+            : toolsInstalled
+              ? t('toolsInstalled')
+              : toolsDownload && toolsDownload.error
+                ? t('toolsRetry')
+                : toolsItem.state === 'missing' ? t('toolsInstall') : t('toolsContinue')
       const toolRow = function (name, info) {
         const version = info && info.version ? ' v' + info.version : ''
         const origin = !info

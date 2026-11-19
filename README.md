@@ -4,7 +4,7 @@
 >
 > A five-tier context-compression policy for DeepSeek Harness: a settings page, four agent tools, a live occupancy line, and proactive compaction.
 >
-> 包名与仓库：`dsh-compression-tiers`（社区 `dsh-` 前缀；加载器行 id 为 `compression-tiers`）。
+> 包名与仓库：npm 包名 `dsh-harness-toolbox`（1.6.1 起；旧名 `dsh-compression-tiers` 已弃用），仓库仍是 [dsh-compression-tiers](https://github.com/Homer4033/dsh-compression-tiers)，加载器行 id 为 `compression-tiers`。
 
 ## 目录
 
@@ -53,11 +53,20 @@
 
 **升级**：替换目录后重新安装，或按插件页的升级流程操作；替换已安装包后需要重启 DSH 才能加载新的 Host 模块。
 
+**从 npm 安装（发布过审后）**
+
+```bash
+npm install dsh-harness-toolbox
+```
+
+npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布与版本](#发布与版本)。1.6.1 起包名改成 `dsh-harness-toolbox`，从旧名升级时要在插件页移除旧条目再添加本目录（bundle 名就是包名）。
+
 ## 发布与版本
 
 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag，变更写在 [CHANGELOG.md](CHANGELOG.md)。
 
-- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.0`
+- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.1`
+- npm：包名 `dsh-harness-toolbox`；`npm publish` 直接发布会要求 OTP，现在改走 `npm stage publish` → 维护者在 CLI 或 npmjs.com 的 **Staged Packages** 里完成 2FA 审批（`npm stage approve <id>`）。旧名 `dsh-compression-tiers` 下只留着一个 `0.0.0-stage` 占位版本，不要使用。
 - GitHub Release 页面按 tag 生成（[releases](https://github.com/Homer4033/dsh-compression-tiers/releases)），更新日志见 [CHANGELOG.md](CHANGELOG.md)
 - CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与 github_push 推送前的检查同源
 - 本地自查：`npm run check:secrets`
@@ -205,6 +214,7 @@
 - **浏览器刷新**：切换档位对引擎立即生效；设置页自身的状态通过接口刷新，个别情况下需要刷新页面重新读取。
 - **中文/英文**：设置页与插件详情按 DSH 语言环境显示；智能体面向的提示与工具描述为英文。
 - **仓库 UI 全部下线**：1.4.x 的侧栏面板在 1.5.0 删除，1.5.1 又拿掉了设置页里的默认仓库与推送/建仓/查看；`settings.json` 里的 `github.repos`、`github.repoPath` 会在下一次写入时被清掉。推多个仓库就让智能体在各自工作区里调用 `github_push`。1.6.0 只在会话标题旁加了一个按会话绑定的在线仓库选择器，仍然没有仓库列表面板，也没有推送按钮。
+- **包名变化需要重装**：1.6.1 起包名是 `dsh-harness-toolbox`，加载器 id、状态目录（`<DSH home>/compression-tiers`）与工具名都没变；从旧名升级要在插件页移除旧条目再添加本目录，否则 bundle 名与目录里的包名对不上，插件不会激活。
 
 ## 为什么是这五档
 

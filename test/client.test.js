@@ -394,3 +394,12 @@ test('a running video-tool download shows its progress and blocks a second start
   const fill = Array.isArray(bar.props.children) ? bar.props.children[0] : bar.props.children
   assert.equal(fill.props.style.width, '47.9%')
 })
+
+test('the video-tool button says loading until the status arrives', () => {
+  const { nodes } = render([settingsState, '', false, null, '', '', false, null, null, '', false, null, null, '', false])
+  const button = nodes
+    .filter((node) => node.type === 'button')
+    .find((node) => textOf(node) === 'toolsLoading')
+  assert.ok(button, 'the panel shows a loading label instead of claiming the platform is unsupported')
+  assert.equal(button.props.disabled, true)
+})

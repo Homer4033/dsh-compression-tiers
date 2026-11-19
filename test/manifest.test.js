@@ -10,7 +10,7 @@ const read = (path) => readFileSync(join(root, path), 'utf8')
 const manifest = JSON.parse(read('package.json'))
 
 test('the bundle manifest declares the patch, client and locale exports', () => {
-  assert.equal(manifest.name, 'dsh-compression-tiers')
+  assert.equal(manifest.name, 'dsh-harness-toolbox')
   assert.equal(manifest.type, 'module')
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
   assert.equal(manifest.dsh.client.platform, 'web')

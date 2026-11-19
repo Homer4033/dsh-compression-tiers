@@ -1,6 +1,12 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.0`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.1`。
+
+## 1.6.1 — 2026-11-19
+
+- **包名改为 `dsh-harness-toolbox`**：功能已经不止压缩（全局规则、`gh` 管理、`github_push`、会话发布仓库、ffmpeg/ffprobe），旧名不再贴切。加载器行 id（`compression-tiers`）、状态目录、工具名都不变；bundle 名就是包名，所以升级要在插件页移除旧条目再添加本目录。
+- **npm 发布改走暂存**：npm 已对 2FA-bypass token 关闭直接发布，`npm publish` 会被拒；改为 `npm stage publish`，再由维护者在 npmjs.com 的 Staged Packages 或 `npm stage approve <id>` 完成 2FA 审批。旧名下的 `0.0.0-stage` 占位版本不再使用。
+- 音视频面板在状态还没读到时不再误报「当前系统没有托管版」，改为「读取中…」；只有平台确实没有托管源时才显示不可用。
 
 ## 1.6.0 — 2026-11-19
 
