@@ -46,7 +46,7 @@
 11. 登录只驱动 `gh auth login --web` 的设备码流程，不读取、不复制、不代存 `gh` 凭据；取消时结束子进程并丢弃会话状态。
 12. ffmpeg / ffprobe 下载用 `SOURCES` 里的 URL 与 HTTP Range 续传；解压后必须先对暂存的两个二进制各跑一次 `-version`，再原子替换 `bin` 目录、失败回滚旧版本；只把托管 `bin` 目录插到本进程 PATH 最前，不写系统环境变量。托管源只有 Windows，其它平台只做 PATH 检测。
 13. 会话发布仓库只允许改 `github_push` 的推送目标：不得因此克隆仓库、切换分支或改动会话工作区；绑定归一化必须是 `owner/name`，非法值丢弃，最多保留 200 条。
-14. 会话头选择器注册在官方 `conversation.session.header.actions`（id `compression-repo`）；不得改标题、工作区选择器或其它官方 slot 的注册。
+14. 会话头选择器注册在官方 `conversation.session.header.actions`（id `compression-repo`）；不得改标题、工作区选择器或其它官方 slot 的注册。官方 header 对标题旁动作是 `overflow: clip`，需要渲染到标题下方时只能用 portal 挂到 View 标签行（`[data-conversation-tabs]` 的父节点）并负责清理，拿不到标签行就退回内联。
 
 ## 验证要求
 
@@ -88,3 +88,4 @@
 - 2026-11-19：仓库 UI 全部下线：删掉设置页的默认仓库输入与仓库状态、推送、建仓、查看按钮，以及 `configure` / `push` / `create` / `view` 动作和 `GET /api/github/repo` 路由；删除 `github.repoPath`（升级后下一次写入即清掉）与未再使用的 `resolveRepoPath`；发布只保留 `github_push`；`github_push` 的目录选择变为「显式路径 → 会话工作目录」；版本 1.5.1。
 - 2026-11-19：新运行时兼容：`engines.dsh` 放宽为 `>=0.2.2-rc.3 <0.3.0`（rc.5 不再被判不兼容）。会话发布仓库：新增 `conversation.session.header.actions` 选择器（id `compression-repo`）、`/api/github/online` 与 `/api/github/binding` 路由、`sessionRepos` 状态，`github_push` 增加 `target` 并跳过 URL 远端的仓库快照。音视频工具：新增 `src/ffmpeg.js` 与 `/api/ffmpeg`，设置页面板负责检测、断点续传下载、自检后原子替换与 PATH 前插。`src/gh.js` 导出 `runCommand` / `extractArchive` 并新增 `listRepos` / `parseRepoList`，`src/http.js` 新增 `queryParam`；测试增至 113 条（`test/ffmpeg.test.js`、`test/http.test.js` 为新增）；版本 1.6.0。
 - 2026-11-19：**包名改为 `dsh-harness-toolbox`**（旧名 `dsh-compression-tiers`，加载器 id 仍为 `compression-tiers`，状态目录与工具名不变；bundle 名即包名，升级须在插件页移除旧条目再添加本目录）。npm 发布改为「`npm stage publish` + 人工 2FA 审批」，旧名的 `0.0.0-stage` 占位弃用。音视频面板在未读到状态时显示「读取中…」而不是误报不支持；版本 1.6.1。
+- 2026-11-19：会话头在线仓库选择器改成标题下方 View 标签行右侧的胶囊（图标 +「仓库」+ 当前 `owner/name` + 箭头，绑定时选中色描边）；官方 header 的 `.titleCluster` 是 `overflow: clip`，所以用 React portal 把外观挂到 `[data-conversation-tabs]` 所在行，原生 `<select>` 铺在胶囊上负责交互，没有标签行时退回内联；版本 1.6.2。

@@ -2,6 +2,12 @@ window.__ModuleLoader__.load({
   id: 'dsh-harness-toolbox',
   factory(require) {
     const React = require('react')
+    let ReactDOM = null
+    try {
+      ReactDOM = require('react-dom')
+    } catch {
+      ReactDOM = null
+    }
     const h = React.createElement
     const NS = 'compressionTiers'
     const LEVELS = ['gentle', 'light', 'standard', 'aggressive', 'max']
@@ -117,6 +123,7 @@ window.__ModuleLoader__.load({
         repoSelectLabel: '仓库',
         repoSelectAria: '在线仓库（github_push 的推送目标）',
         repoTitle: 'github_push 默认推送到这个在线仓库',
+        repoUnbound: '未绑定',
         repoNone: '不绑定（用 git remote）',
         repoLoading: '读取仓库列表…',
         repoPrivate: '私有',
@@ -227,6 +234,7 @@ window.__ModuleLoader__.load({
         repoSelectLabel: 'Repo',
         repoSelectAria: 'Online repository (the github_push target)',
         repoTitle: 'github_push publishes to this online repository by default',
+        repoUnbound: 'Not bound',
         repoNone: 'Not bound (use the git remote)',
         repoLoading: 'Loading repositories…',
         repoPrivate: 'private',
@@ -480,40 +488,101 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-tertiary);
   word-break: break-all;
 }
-.ct-binding {
+.ct-repo-slot {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-left: auto;
+  margin-top: 2px;
+}
+.ct-repo-anchor-wrap {
+  display: contents;
+}
+.ct-repo-anchor {
+  display: none;
+}
+.ct-repo-group {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+.ct-repo-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  height: 26px;
+  max-width: 260px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 16px;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
-.ct-binding-label {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
+@media (hover: hover) {
+  .ct-repo-pill:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
-.ct-select {
-  box-sizing: border-box;
-  max-width: 200px;
-  min-width: 0;
-  margin: 0;
-  padding: 2px 6px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  line-height: 18px;
-  cursor: pointer;
-}
-.ct-select:focus-visible {
+.ct-repo-pill:focus-within {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: 1px;
 }
+.ct-repo-pill[data-bound='true'] {
+  border-color: var(--dsw-alias-border-selected);
+  background: var(--dsw-alias-bg-module-platform);
+}
+.ct-repo-icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.ct-repo-pill[data-bound='true'] .ct-repo-icon {
+  color: var(--dsw-alias-label-secondary);
+}
+.ct-repo-caption {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+.ct-repo-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+}
+.ct-repo-chevron {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.ct-repo-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.ct-repo-select:disabled {
+  cursor: default;
+}
 .ct-repo-note {
-  max-width: 200px;
+  max-width: 180px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -607,6 +676,10 @@ window.__ModuleLoader__.load({
       const [bound, setBound] = React.useState('')
       const [note, setNote] = React.useState(repoCache.repos ? '' : t('repoLoading'))
       const [busy, setBusy] = React.useState(false)
+      // The pill is portaled into the View tab strip: the official header clips
+      // title-adjacent actions, so it cannot render below the title in place.
+      const [host, setHost] = React.useState(null)
+      const anchor = React.useRef(null)
       const mounted = React.useRef(true)
 
       React.useEffect(function () {
@@ -628,6 +701,26 @@ window.__ModuleLoader__.load({
         })
         return function () {
           mounted.current = false
+        }
+      }, [sessionId])
+
+      React.useLayoutEffect(function () {
+        const node = anchor.current
+        const doc = node && node.ownerDocument
+        if (!doc) return undefined
+        const tabs = doc.querySelector('[data-conversation-tabs]')
+        const row = tabs ? tabs.parentElement : null
+        if (!row) {
+          setHost(null)
+          return undefined
+        }
+        const box = doc.createElement('div')
+        box.className = 'ct-repo-slot'
+        row.appendChild(box)
+        setHost(box)
+        return function () {
+          if (box.parentNode) box.parentNode.removeChild(box)
+          setHost(null)
         }
       }, [sessionId])
 
@@ -666,16 +759,49 @@ window.__ModuleLoader__.load({
           row.nameWithOwner + (row.private ? ' · ' + t('repoPrivate') : '')))
       })
 
-      return h('label', { className: 'ct-binding', title: t('repoTitle') },
-        h('span', { className: 'ct-binding-label' }, t('repoSelectLabel')),
-        h('select', {
-          className: 'ct-select',
-          value: bound,
-          disabled: busy || !sessionId,
-          'aria-label': t('repoSelectAria'),
-          onChange: selectRepo,
-        }, options),
+      const pill = h('span', {
+        className: 'ct-repo-pill',
+        'data-bound': bound ? 'true' : 'false',
+        title: note ? t('repoTitle') + ' — ' + note : t('repoTitle'),
+      },
+      h('svg', {
+        className: 'ct-repo-icon',
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: '1.4',
+        'aria-hidden': 'true',
+      },
+      h('rect', { x: '2.5', y: '2.5', width: '11', height: '11', rx: '2.5' }),
+      h('path', { d: 'M5.5 6.5h5M5.5 9.5h3.5', strokeLinecap: 'round' })),
+      h('span', { className: 'ct-repo-caption' }, t('repoSelectLabel')),
+      h('span', { className: 'ct-repo-value' }, bound || t('repoUnbound')),
+      h('svg', {
+        className: 'ct-repo-chevron',
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: '1.6',
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        'aria-hidden': 'true',
+      }, h('path', { d: 'M4.5 6.25 8 9.75l3.5-3.5' })),
+      h('select', {
+        className: 'ct-repo-select',
+        value: bound,
+        disabled: busy || !sessionId,
+        'aria-label': t('repoSelectAria'),
+        onChange: selectRepo,
+      }, options))
+
+      const group = h('span', { className: 'ct-repo-group' },
+        pill,
         note ? h('span', { className: 'ct-repo-note', role: 'status', title: note }, note) : null)
+
+      const portal = host && ReactDOM && typeof ReactDOM.createPortal === 'function'
+      return h('span', { className: 'ct-repo-anchor-wrap' },
+        h('span', { ref: anchor, className: 'ct-repo-anchor' }),
+        portal ? ReactDOM.createPortal(group, host) : (host ? null : group))
     }
 
     function Page(props) {

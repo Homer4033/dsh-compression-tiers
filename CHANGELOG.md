@@ -1,6 +1,11 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.1`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.2`。
+
+## 1.6.2 — 2026-11-19
+
+- 会话头的在线仓库选择器改成**标题下方 View 标签行右侧**的胶囊控件：仓库图标 +「仓库」标签 + 当前 `owner/name`（未绑定显示「未绑定」）+ 箭头；有绑定时用选中色描边，悬停/聚焦有反馈，长名字省略。官方 header 会裁剪标题旁的动作（`.titleCluster { overflow: clip }`），所以胶囊通过 React portal 挂到 `[data-conversation-tabs]` 所在行的末尾；没有标签行（少于两个 View）时退回标题旁内联显示。
+- 原生 `<select>` 仍铺在胶囊上负责键盘与选择行为；原来的裸下拉与灰色提示文字被这层外观替换。
 
 ## 1.6.1 — 2026-11-19
 

@@ -65,7 +65,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 
 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag，变更写在 [CHANGELOG.md](CHANGELOG.md)。
 
-- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.1`
+- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.2`
 - npm：包名 `dsh-harness-toolbox`；`npm publish` 直接发布会要求 OTP，现在改走 `npm stage publish` → 维护者在 CLI 或 npmjs.com 的 **Staged Packages** 里完成 2FA 审批（`npm stage approve <id>`）。旧名 `dsh-compression-tiers` 下只留着一个 `0.0.0-stage` 占位版本，不要使用。
 - GitHub Release 页面按 tag 生成（[releases](https://github.com/Homer4033/dsh-compression-tiers/releases)），更新日志见 [CHANGELOG.md](CHANGELOG.md)
 - CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与 github_push 推送前的检查同源
@@ -132,6 +132,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 
 `github_push` 默认推设置里的 `github.remote`（初始 `origin`）。会话标题右侧的「仓库」选择器把默认目标换成某个在线仓库：
 
+- **位置**：会话标题下方的 View 标签行右侧（胶囊控件：仓库图标 + 当前 `owner/name`）。官方 header 会裁剪标题旁的动作，所以这层外观是通过 portal 挂到标签行上的；没有标签行时退回标题旁内联显示。
 - **列表**：`GET /compression-tiers/api/github/online` 用 `gh repo list --limit 100` 列出账号仓库（含私有标记），客户端缓存 5 分钟；`gh` 未安装、未登录、网络不通分别给出说明，不会伪装成空账号。
 - **绑定**：选择即写 `settings.json` 的 `sessionRepos[sessionId]`（`owner/name`，最多保留 200 条），接口是 `GET/POST /compression-tiers/api/github/binding?session=…`。
 - **效果**：绑定后 `github_push` 的 `target` 是 `https://github.com/<owner/name>.git`，直接作为 `git push` 的远端；只改推送目标，不克隆、不切分支、不改工作区。选「不绑定（用 git remote）」即清掉该会话的绑定。

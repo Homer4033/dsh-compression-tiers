@@ -37,6 +37,7 @@ function fakeReact(states) {
     createElement: (type, props, ...children) => ({ type, props: { ...(props || {}), children } }),
     useState: (initial) => (queue.length ? [queue.shift(), () => {}] : [initial, () => {}]),
     useEffect: () => {},
+    useLayoutEffect: () => {},
     useRef: (value) => ({ current: value }),
   }
 }
@@ -402,4 +403,25 @@ test('the video-tool button says loading until the status arrives', () => {
     .find((node) => textOf(node) === 'toolsLoading')
   assert.ok(button, 'the panel shows a loading label instead of claiming the platform is unsupported')
   assert.equal(button.props.disabled, true)
+})
+
+test('the repository pill shows the bound name and keeps the select inside it', () => {
+  const nodes = renderHeader([[], 'Homer4033/x', '', false], { sessionId: 'session-pill', t: (key) => key })
+  const pill = nodes.find((node) => String(node.props.className || '') === 'ct-repo-pill')
+  assert.ok(pill, 'the header renders a pill')
+  assert.equal(pill.props['data-bound'], 'true')
+  const value = nodes.find((node) => String(node.props.className || '') === 'ct-repo-value')
+  assert.equal(textOf(value), 'Homer4033/x')
+  const caption = nodes.find((node) => String(node.props.className || '') === 'ct-repo-caption')
+  assert.equal(textOf(caption), 'repoSelectLabel')
+  const select = nodes.find((node) => node.type === 'select')
+  assert.ok(select, 'the native select drives the pill')
+})
+
+test('an unbound session shows the unbound label inside the pill', () => {
+  const nodes = renderHeader([[], '', '', false], { sessionId: 'session-pill', t: (key) => key })
+  const pill = nodes.find((node) => String(node.props.className || '') === 'ct-repo-pill')
+  assert.equal(pill.props['data-bound'], 'false')
+  const value = nodes.find((node) => String(node.props.className || '') === 'ct-repo-value')
+  assert.equal(textOf(value), 'repoUnbound')
 })
