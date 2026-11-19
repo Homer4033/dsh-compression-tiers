@@ -1,6 +1,17 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.7.1`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.0`。
+
+## 1.8.0 — 2026-11-21
+
+- **「音视频工具」改成「组件管理」**：设置页最后一栏不再只管 ffmpeg，而是把四套托管组件放在一栏里——GitHub CLI、git、ffmpeg/ffprobe、Python。每一行都长一样：名称 + 钉住的版本 + 实际用的版本 + 状态（未安装 / 未完成可续传 / 下载中 / 已安装 / 系统已安装 / 下载失败 / 当前系统不可用）+ 实际二进制路径 →「下载」「重新检测」一行两个按钮。原来的 GitHub CLI 下载行与「下载位置」面板都并进这一栏。
+- **新增 `git` 与 `Python` 的托管下载**：新增 `src/components.js`，钉住 MinGit `2.56.1`（`MinGit-2.56.1-64-bit.zip` / `-arm64.zip`）与 python-build-standalone `3.11.18+20261110`（`...-x86_64-pc-windows-msvc-install_only.tar.gz`，URL 里的 `+` 保持 `%2B`）。同样是 HTTP Range 续传、解压后先在临时目录跑一次 `--version` 自检、再原子换上整棵目录（失败回滚），最后把 `<root>/git/cmd`、`<root>/python`、`<root>/python/Scripts` 插到本进程 PATH 最前。
+- **新的拖放区**：安装的解包/暂存目录放在 `<root>/.staging/<id>`，不再放在组件目录里——否则「把暂存的树 rename 成 `<root>/<id>`」会踩到自己的父目录。
+- **「下载位置」并入同一栏**：仍然是 `settings.json` 的 `toolsPath`（空 = `<DSH home>/compression-tiers`），仍然只接受绝对路径、下载中 409、目标已存在预检拒绝、跨卷 `EXDEV` 退化为复制后删除、支持半迁移重试。变化是迁移现在整体搬**四个**组件（`gh` / `git` / `ffmpeg` / `python`），PATH 里的旧目录也一并换掉。
+- **GitHub 栏只留登录**：`GitHub CLI` 面板改名为 `GitHub 登录`，只剩账号状态、`gh auth login --web` 设备码、复制/打开/取消与网络体检；二进制的下载与检测搬到组件管理栏。
+- **接口**：新增 `GET /compression-tiers/api/components`（返回 `root` 与四行 `components`，每行 `id/name/version/toolVersion/state/supported/ready/managed/system/path/percent/error/running/tools`）与 `POST` `{"id":"git","action":"download"}`（202 + 刷新的列表，未知 id 返回 400）。四行的映射放在新增的 `src/component-rows.js`，与宿主服务解耦、可单独测试。
+- **共享按钮标准的范围扩大**：`downloadControl()` 与 `actionButton()` 现在服务四行而不是两个面板；按面板分裂的标签键（`ghDownload` / `toolsInstall` …）继续禁止回归，`toolsPathTitle` / `ghTitle` / `ghPathLabel` / `toolsLoadFailed` 等旧键随面板合并删除，`ghPathLabel` 由共享的 `pathLabel` 取代。
+- 测试：新增 `test/components.test.js`（资产钉住、`git --version` / `Python 3.11.18` 解析、PATH 检测、状态 missing/installed/system/partial、PATH 前插去重、未知组件与无托管构建的早退）与 `test/component-rows.test.js`（四行顺序、state→ready/managed/system/running 映射、ffmpeg 双二进制、缺失状态丢行）；`test/client.test.js` 按新面板重写组件、位置与登录用例；`test/tools-path.test.js` 覆盖四组件迁移，共 154 条。
 
 ## 1.7.1 — 2026-11-20
 

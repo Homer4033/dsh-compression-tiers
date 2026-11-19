@@ -6,16 +6,17 @@ import { isAbsolute, join, normalize, resolve, sep } from 'node:path'
  *
  * `gh` and ffmpeg used to be two hardcoded directories inside the DSH home.
  * They now share `<toolsPath>`: `gh` installs into `<toolsPath>/gh`, ffmpeg into
- * `<toolsPath>/ffmpeg`. The setting lives in `settings.json` as `toolsPath`;
+ * `<toolsPath>/ffmpeg`, git into `<toolsPath>/git`, Python into
+ * `<toolsPath>/python`. The setting lives in `settings.json` as `toolsPath`;
  * empty means the default `<DSH home>/compression-tiers`, which is exactly where
- * earlier versions put both tools, so upgrading moves nothing.
+ * earlier versions put `gh` and ffmpeg, so upgrading moves nothing.
  *
  * `toolsPath` is the only place a managed binary's location comes from; nothing
  * else may hardcode a user-visible install directory.
  */
 
 /** Subdirectories of the root, one per managed component. */
-export const TOOL_DIRS = ['gh', 'ffmpeg']
+export const TOOL_DIRS = ['gh', 'git', 'ffmpeg', 'python']
 
 export function defaultToolsPath(home) {
   return join(home, 'compression-tiers')
@@ -65,17 +66,15 @@ export function toolsStatus(home, settings, { running = {}, platform = process.p
   const exists = fs.existsSync || existsSync
   const path = resolveToolsPath(home, settings)
   const fallback = defaultToolsPath(home)
-  const component = (name) => {
-    const dir = join(path, name)
-    return { path: dir, exists: Boolean(exists(dir)) }
-  }
   return {
     path,
     defaultPath: fallback,
     isDefault: samePath(path, fallback, platform),
-    gh: component('gh'),
-    ffmpeg: component('ffmpeg'),
-    running: { gh: running.gh === true, ffmpeg: running.ffmpeg === true },
+    components: TOOL_DIRS.map((id) => {
+      const dir = join(path, id)
+      return { id, path: dir, exists: Boolean(exists(dir)) }
+    }),
+    running: Object.fromEntries(TOOL_DIRS.map((id) => [id, running[id] === true])),
   }
 }
 
@@ -99,8 +98,9 @@ export function migrateTools({ home, settings, target, running = {}, platform = 
   const to = parseToolsPath(target)
   const report = { from, to, moved: [], skipped: [], failed: [] }
   if (samePath(from, to, platform)) return report
-  if (running.gh === true || running.ffmpeg === true) {
-    const error = new Error('a download is running; wait for it to finish, then migrate')
+  const busy = TOOL_DIRS.filter((id) => running[id] === true)
+  if (busy.length > 0) {
+    const error = new Error(`${busy.join(', ')} is downloading; wait for it to finish, then migrate`)
     error.status = 409
     throw error
   }

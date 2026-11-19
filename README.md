@@ -13,8 +13,7 @@
 - [使用](#使用)
 - [全局规则](#全局规则)
 - [GitHub CLI](#github-cli)
-- [音视频工具](#音视频工具)
-- [下载位置](#下载位置)
+- [组件管理](#组件管理)
 - [五档参数](#五档参数)
 - [智能体工具](#智能体工具)
 - [工作原理](#工作原理)
@@ -34,8 +33,8 @@
 5. **GitHub CLI**：同一页管理 `gh`——识别系统 PATH、下载固定版本的托管副本、走设备码登录，供官方变更请求面板使用。
 6. **发布闭环**：`github_push` 工具让智能体把当前工作区发出去：先体检网络、扫密钥，再带超时推送并报出仍在本地的东西。
 7. **会话发布仓库**：会话标题旁选择在线仓库，选中的仓库成为该会话 `github_push` 的默认推送目标；只改目标 URL，不克隆、不改工作区。
-8. **音视频工具**：同一页检测 `ffmpeg` / `ffprobe`，可从 gyan.dev 下载托管版（断点续传、自检后原子替换），托管版优先并插到本进程 PATH 最前。
-9. **统一下载位置**：`gh` 与 `ffmpeg` 都装在同一个可配置根目录下（默认 `<DSH home>/compression-tiers`，`<root>/gh` 与 `<root>/ffmpeg`），换盘或换目录时一次性整体迁移两套托管文件。
+8. **组件管理**：同一页管理四套托管组件——GitHub CLI、git、ffmpeg/ffprobe、Python：识别系统 PATH、可断点续传下载托管版（解压后先自检再原子替换），托管版优先并插到本进程 PATH 最前。
+9. **统一下载位置**：四套组件都装在同一个可配置根目录下（默认 `<DSH home>/compression-tiers`，`<root>/gh`、`<root>/git`、`<root>/ffmpeg`、`<root>/python`），换盘或换目录时一次性整体迁移。
 
 本包从 `homerdsh-workbench` 的压缩子系统拆出，状态独立、工具名独立，可单独安装；全局规则与 GitHub CLI 面板也由工作台合并而来。
 
@@ -102,13 +101,13 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 
 ## GitHub CLI
 
-官方「变更请求与工作树」bundle（`@deepseek-ai/dsh-experimental-forge-bundle`）靠本机 `gh` 读 PR、检查与评审。设置页的「GitHub CLI」面板负责三件事：
+官方「变更请求与工作树」bundle（`@deepseek-ai/dsh-experimental-forge-bundle`）靠本机 `gh` 读 PR、检查与评审。设置页的「组件管理」一栏负责安装它，独立的「GitHub 登录」一栏负责登录：
 
 - **检测**：先看托管版 `<toolsPath>/gh/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把它插到宿主进程 PATH 最前面，官方面板随即可用。
 - **下载**：内置固定版本 `gh 2.76.2`（Windows / Linux，x64 / arm64），从 `cli/cli` 官方 release 下载；支持 HTTP Range 断点续传、10 分钟超时、解压后先跑 `gh --version` 探测暂存副本，再原子替换，失败自动回滚旧二进制。
 - **登录**：调 `gh auth login --web` 走设备码流程：页面显示一次性验证码（可复制）、打开授权页、取消；`gh` 子进程在后台轮询，完成后自动刷新成「已登录：账号」。凭据存在 gh 自己的存储里，不写 DSH 数据目录。
 
-接口：`GET/POST /compression-tiers/api/github`（状态，动作 `download` / `login` / `cancel`）与 `GET /compression-tiers/api/github/auth`（`gh auth status --json hosts` + `gh --version`），都走同一套同源校验。
+接口：`GET/POST /compression-tiers/api/github`（登录状态，动作 `download` / `login` / `cancel`）与 `GET /compression-tiers/api/github/auth`（`gh auth status --json hosts` + `gh --version`），都走同一套同源校验。
 
 **登录状态带 scopes**：`gh auth status --json hosts` 可用时读 JSON，老版本回落到文本解析；缺 `repo` scope 时面板直接提示——私有仓库推送会 403，不用等到失败才发现。
 
@@ -142,25 +141,33 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 
 > 下载只校验大小与 `gh --version`，没有对压缩包固定 SHA-256；钉住的是官方 release URL。
 
-## 音视频工具
+## 组件管理
 
-设置页最下方管理 `ffmpeg` 与 `ffprobe`（视频剪辑、转码、读时长与编码）：
+设置页最后一栏是「组件管理」：四套托管组件一行一个，行的结构完全相同——名称 + 钉住的版本 + 实际用的版本 + 状态 + 实际二进制路径，然后是同一行的「下载」「重新检测」两个按钮；栏底是它们共用的下载根目录。
 
-- **检测**：先看托管版 `<toolsPath>/ffmpeg/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把该目录插到宿主进程 PATH 最前。面板显示每个工具的版本与路径，来源标为「托管版」或「系统 PATH」。
-- **下载**：Windows 用 gyan.dev 的 `ffmpeg-release-essentials.zip`（约 110 MB，浮动的 release 构建）；HTTP Range 断点续传、20 分钟超时，解压后对两个二进制各跑一次 `-version` 自检，再原子替换 `bin` 目录，失败回滚旧版本。
-- **接口**：`GET /compression-tiers/api/ffmpeg` 读状态（含下载进度），`POST` `{"action":"download"}` 启动后台下载；页面在下载期间轮询进度条。
-- **边界**：托管版只覆盖 Windows；Linux / macOS 没有托管源，面板只显示 PATH 检测结果。下载源是当前 release 而非固定版本，钉住的只有 URL 与自检。
+| 组件 | 托管源 | 托管位置 | 放上 PATH 的目录 |
+| --- | --- | --- | --- |
+| GitHub CLI | `cli/cli` 官方 release，钉 `gh 2.76.2` | `<root>/gh` | `<root>/gh/bin` |
+| git | git-for-windows 的 MinGit，钉 `2.56.1`（`MinGit-2.56.1-64-bit.zip` / `-arm64.zip`） | `<root>/git` | `<root>/git/cmd` |
+| ffmpeg / ffprobe | gyan.dev `ffmpeg-release-essentials.zip`（浮动 release） | `<root>/ffmpeg` | `<root>/ffmpeg/bin` |
+| Python | python-build-standalone，钉 `3.11.18+20261110`（`...-x86_64-pc-windows-msvc-install_only.tar.gz`） | `<root>/python` | `<root>/python`、`<root>/python/Scripts` |
+
+- **检测**：先看托管副本，再看系统 PATH；两处都有时优先托管副本。面板标出来源（`托管版` / `系统 PATH`）与版本，PATH 里只有系统副本时按钮显示「仍要下载」。
+- **下载**：HTTP Range 断点续传、20 分钟超时；解压到 `<root>/.staging/<id>` 后先跑一次 `--version`（git 与 Python）或 `-version`（ffmpeg/ffprobe）自检，通过才原子换上整棵目录，失败回滚旧版本并保留 `.part`。暂存目录不放组件目录里，否则「把暂存树 rename 成组件目录」会踩到自己的父目录。
+- **PATH**：只在本进程 PATH 最前插入托管目录，不写系统环境变量；插件激活时、安装成功后、迁移之后各插一次，重复插入会被去重。
+- **接口**：`GET /compression-tiers/api/components` 读四行状态与下载根目录，`POST` `{"id":"git","action":"download"}` 启动后台下载并返回 202 + 刷新后的列表，未知 id 返回 400。`GET /compression-tiers/api/ffmpeg` 与 `/api/github` 仍保留（前者是单组件历史接口，后者带登录状态）。
+- **边界**：托管源只有 Windows（x64 / arm64，Python 只有 x64），其它平台只做 PATH 检测并显示「当前系统不可用」。ffmpeg 的源是当前 release 而非固定版本，钉住的只有 URL 与自检；git 与 Python 钉住版本与资源文件名。
 
 > 与 `gh` 的管理方式一致：不写系统环境变量，只在本进程 PATH 前插；未完成或失败的下载保留 `.part` 文件，重试时续传。
 
 ## 下载位置
 
-`gh` 与 `ffmpeg` 共用同一个下载根目录，设置页「下载位置」一栏就是它：
+四套组件共用同一个下载根目录，就是「组件管理」栏底部那一段：
 
-- **默认**：`<DSH home>/compression-tiers`。`gh` 在 `<root>/gh`，`ffmpeg` / `ffprobe` 在 `<root>/ffmpeg`；这与 1.6.x 的两个目录完全一致，升级不会搬动任何文件。
-- **迁移**：填一个绝对路径再点「迁移」，两套托管目录一起搬过去并写进 `settings.json` 的 `toolsPath`；同步清掉本进程 PATH 里旧目录的条目，再前插新目录。
-- **规则**：只接受绝对路径（相对路径会随进程工作目录漂移，直接拒绝）；下载进行中返回 409；目标里已有同名组件时先拒绝、什么都不动；跨卷 `rename` 失败（`EXDEV`）时退化为复制后删除；已搬过去一半的目录允许重试补完。
-- **接口**：`GET /compression-tiers/api/tools` 读状态（当前/默认目录、两个组件是否存在、是否有下载在跑），`POST` `{"action":"migrate","path":"D:\\tools"}` 执行迁移；与其它设置路由一样走同源校验。
+- **默认**：`<DSH home>/compression-tiers`。`gh` 在 `<root>/gh`，git 在 `<root>/git`，`ffmpeg` / `ffprobe` 在 `<root>/ffmpeg`，Python 在 `<root>/python`；`gh` 与 ffmpeg 的路径与 1.6.x 完全一致，升级不会搬动任何文件。
+- **迁移**：填一个绝对路径再点「迁移」，四套托管目录一起搬过去并写进 `settings.json` 的 `toolsPath`；同步清掉本进程 PATH 里旧目录的条目，再前插新目录。
+- **规则**：只接受绝对路径（相对路径会随进程工作目录漂移，直接拒绝）；任一下载进行中返回 409；目标里已有同名组件时先拒绝、什么都不动；跨卷 `rename` 失败（`EXDEV`）时退化为复制后删除；已搬过去一半的目录允许重试补完。
+- **接口**：`GET /compression-tiers/api/tools` 读状态（当前/默认目录、四个组件是否存在、是否有下载在跑），`POST` `{"action":"migrate","path":"D:\\tools"}` 执行迁移；与其它设置路由一样走同源校验。
 
 ## 五档参数
 
@@ -206,7 +213,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 - 对预设结构的访问是防御式的：DSH 升级改了私有结构时，插件放弃更新并保留官方默认，而不是让预设激活失败。
 - 设置路由走官方 `webServer`，并用 `connection.requestRejection` 做同源与浏览器认证；拿不到校验服务时 fail closed。
 - 全局规则没有第二份状态：`<DSH home>/AGENTS.md` 本身就是唯一事实来源，插件只负责原子写入和提示摘要；文件删掉等于没有规则。
-- GitHub CLI 与 ffmpeg / ffprobe 的托管副本都放在同一个下载根目录下（`settings.json` 的 `toolsPath`，默认 `<DSH home>/compression-tiers`，两个组件各占 `<root>/gh` 与 `<root>/ffmpeg`），与工作台的 `homerdsh/components` 互不干扰；PATH 前插只影响本进程，不改系统环境变量。
+- GitHub CLI、git、ffmpeg / ffprobe 与 Python 的托管副本都放在同一个下载根目录下（`settings.json` 的 `toolsPath`，默认 `<DSH home>/compression-tiers`，四套组件各占 `<root>/gh`、`<root>/git`、`<root>/ffmpeg`、`<root>/python`），与工作台的 `homerdsh/components` 互不干扰；PATH 前插只影响本进程，不改系统环境变量。
 - 会话发布仓库只是 `settings.json` 里的一张 `sessionRepos` 表（会话 id → `owner/name`），不是新的事实来源；删掉条目即回到 `github.remote`。
 - 状态文件与引擎都是可重建的：删掉设置文件后，下次激活会重新沿用当前引擎策略。
 
@@ -221,6 +228,8 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 - **GitHub CLI 需要网络**：托管版从 github.com 下载，企业代理或内网可能失败；失败会保留 `.part` 文件，重试时续传。下载只校验大小和 `gh --version`，不固定压缩包 SHA-256。
 - **系统已有 gh**：面板显示「系统已安装（PATH）」，可以直接登录；点「仍要下载」会安装托管版并优先使用。
 - **ffmpeg 只从 gyan.dev 下载**：需要能访问 `www.gyan.dev`，企业代理或内网可能失败；失败保留 `.part`，重试续传。托管源只有 Windows，Linux / macOS 用 PATH 里的版本；下载的是当前 release 构建，钉住的只有 URL 与安装后的 `-version` 自检。
+- **git 与 Python 的托管源只在 Windows 上**（MinGit 与 python-build-standalone 的 Windows 构建），其它平台那一行显示「当前系统不可用」，只做 PATH 检测。安装后 `<root>/git/cmd`、`<root>/python`、`<root>/python/Scripts` 会插到本进程 PATH 最前，所以该进程里后续起的 `git` / `python` 用的是托管副本。
+- **托管副本会盖过系统版本**：装了托管 git 或 Python 后，本进程内的 `git` / `python` 优先用托管副本（这正是安装的目的）；要回到系统版本，把 `<root>/git`、`<root>/python` 删掉并重启 DSH。
 - **会话仓库绑定只改推送目标**：不会 clone，也不会把工作区切到那个仓库；绑定按持久会话 id 存在 `sessionRepos`，最多 200 条，超出后最旧的被丢弃。
 - **登录凭据位置**：`gh auth login` 把凭据写进 gh 自己的存储（Windows 上是 `%APPDATA%\GitHub CLI`），不写 DSH 数据目录，也不会进转移包。
 - **浏览器刷新**：切换档位对引擎立即生效；设置页自身的状态通过接口刷新，个别情况下需要刷新页面重新读取。
@@ -238,7 +247,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 ## 开发
 
 ```bash
-npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、发布流程、ffmpeg、下载位置、会话绑定、manifest 规范
+npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、发布流程、ffmpeg、git/Python 托管、组件行映射、下载位置、会话绑定、manifest 规范
 node --check index.js
 ```
 
@@ -255,6 +264,8 @@ src/store.js          状态文件读写（JSON 与原子文本写入）
 src/rules.js          全局规则文件：路径、读取、校验、原子写入、提示摘要
 src/gh.js             GitHub CLI：托管下载（断点续传/回滚）、PATH 检测、设备码登录、仓库列表
 src/ffmpeg.js         ffmpeg / ffprobe：PATH 检测、托管下载（续传、自检、原子替换）
+src/components.js     git / Python：托管源、PATH 检测、托管下载（暂存区自检、整棵树原子替换）
+src/component-rows.js 设置页组件行的统一形状（gh / git / ffmpeg / python → 一行状态+路径）
 src/tools-path.js     统一下载根目录：默认值、绝对路径校验、整体迁移（跨卷回退）
 src/publish.js        网络体检、仓库快照、带超时的 push、建仓校验、密钥扫描
 src/push-flow.js      发布流程：目录选择 → 代理 → 密钥扫描 → push → 报告（设置页与 github_push 共用）

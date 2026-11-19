@@ -9,12 +9,14 @@ import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/r
 import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghDownloadRunning, ghStatus, githubLoginStatus, listRepos, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
 import { networkReport, detectProxy } from './src/publish.js'
 import { ffmpegDownloadRunning, ffmpegStatus, prependFfmpegPath, startFfmpegDownload } from './src/ffmpeg.js'
+import { COMPONENT_IDS, componentBinDirs, componentDownloadRunning, componentStatus, prependComponentPath, startComponentDownload } from './src/components.js'
+import { COMPONENT_ORDER, componentRows } from './src/component-rows.js'
 import { migrateTools, parseToolsPath, resolveToolsPath, toolsStatus } from './src/tools-path.js'
 import { pushFlow, pushReportText, resolvePushCwd } from './src/push-flow.js'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
-import { errorStatus, guard, queryParam, readBody, sendJson } from './src/http.js'
+import { errorStatus, guard, httpError, queryParam, readBody, sendJson } from './src/http.js'
 
 export const name = 'compression-tiers'
 export const inject = ['tools', 'systemPrompt']
@@ -43,25 +45,32 @@ function toolsRoot() {
   return resolveToolsPath(homeDir(), readSettings(homeDir()).settings)
 }
 
-/** Whether either managed install is in flight (migration refuses to move one). */
+/** Whether any managed install is in flight (migration refuses to move one). */
 function toolsRunning(root = toolsRoot()) {
-  return { gh: ghDownloadRunning(root), ffmpeg: ffmpegDownloadRunning(root) }
+  const running = { gh: ghDownloadRunning(root), ffmpeg: ffmpegDownloadRunning(root) }
+  for (const id of COMPONENT_IDS) running[id] = componentDownloadRunning(root, id)
+  return running
+}
+
+/** Every directory the managed components put on PATH below one root. */
+function toolPathDirs(root) {
+  const dirs = [join(root, 'gh', 'bin'), join(root, 'ffmpeg', 'bin')]
+  for (const id of COMPONENT_IDS) dirs.push(...componentBinDirs(root, id))
+  return dirs
 }
 
 /**
- * After the managed tools move, the PATH entries for the old `bin` directories
- * must go as well; otherwise the process keeps resolving the binaries that are
- * no longer there.
+ * After the managed tools move, the PATH entries for the old directories must go
+ * as well; otherwise the process keeps resolving the binaries that are no
+ * longer there.
  */
 function repointToolsPath(previous, target) {
   const separator = process.platform === 'win32' ? ';' : ':'
-  const stale = new Set([
-    join(previous, 'gh', 'bin'),
-    join(previous, 'ffmpeg', 'bin'),
-  ])
+  const fold = (dir) => (process.platform === 'win32' ? dir.toLowerCase() : dir)
+  const stale = new Set(toolPathDirs(previous).map(fold))
   process.env.PATH = String(process.env.PATH || '')
     .split(separator)
-    .filter((dir) => dir && !stale.has(dir))
+    .filter((dir) => dir && !stale.has(fold(dir)))
     .join(separator)
   try {
     prependGhPath(target)
@@ -72,6 +81,13 @@ function repointToolsPath(previous, target) {
     prependFfmpegPath(target)
   } catch (error) {
     trace('ffmpeg:path-failed', error instanceof Error ? error.message : String(error))
+  }
+  for (const id of COMPONENT_IDS) {
+    try {
+      prependComponentPath(target, id)
+    } catch (error) {
+      trace(`${id}:path-failed`, error instanceof Error ? error.message : String(error))
+    }
   }
 }
 
@@ -242,6 +258,41 @@ function rulesPayload(rules) {
   }
 }
 
+/**
+ * One row per managed component, in the order the settings page renders them.
+ * The mapping lives in `src/component-rows.js` so the page contract is testable
+ * without the host services this file needs.
+ */
+const MANAGED_COMPONENTS = new Set(COMPONENT_ORDER)
+
+/** The four managed components plus the shared download root, for one load. */
+async function componentsPayload(root) {
+  const [ffmpeg, git, python] = await Promise.all([
+    ffmpegStatus(root),
+    componentStatus(root, 'git'),
+    componentStatus(root, 'python'),
+  ])
+  return {
+    root: toolsStatus(homeDir(), readSettings(homeDir()).settings, { running: toolsRunning(root) }),
+    components: componentRows(root, { gh: ghStatus(root), git, ffmpeg, python }),
+  }
+}
+
+async function startManagedDownload(root, id) {
+  if (!MANAGED_COMPONENTS.has(id)) {
+    throw httpError(400, `unknown component: ${id || '(empty)'}; pass one of ${COMPONENT_ORDER.join(', ')}`)
+  }
+  if (id === 'gh') {
+    startGhDownload(root)
+    return
+  }
+  if (id === 'ffmpeg') {
+    startFfmpegDownload(root)
+    return
+  }
+  await startComponentDownload(root, id)
+}
+
 export function apply(ctx) {
   const compactQueue = attachCompactQueue(ctx, { trace, onFinished: recordCompact })
   ctx.effect(() => compactQueue.dispose, 'compression-tiers: compact queue')
@@ -263,6 +314,15 @@ export function apply(ctx) {
     if (prependFfmpegPath(toolsRoot())) trace('ffmpeg:path-ready', '')
   } catch (error) {
     trace('ffmpeg:path-failed', error instanceof Error ? error.message : String(error))
+  }
+  // git and Python behave the same way: a managed copy, when one was installed
+  // from the settings page, wins over whatever PATH already carries.
+  for (const id of COMPONENT_IDS) {
+    try {
+      if (prependComponentPath(toolsRoot(), id)) trace(`${id}:path-ready`, '')
+    } catch (error) {
+      trace(`${id}:path-failed`, error instanceof Error ? error.message : String(error))
+    }
   }
 
   ctx.effect(() => ctx.systemPrompt.section({
@@ -694,6 +754,34 @@ export function apply(ctx) {
         sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
       }
     }, 'ffmpeg route')
+
+    // Component management: every managed binary in one place (GitHub CLI, git,
+    // ffmpeg, Python) plus the shared download root they all install below. One
+    // GET feeds the whole panel and one POST starts any of the four installs.
+    register('/compression-tiers/api/components', async (req, res) => {
+      if (guard(child, req, res)) return
+      try {
+        const root = toolsRoot()
+        if (req.method === 'GET') {
+          sendJson(res, 200, { ok: true, ...(await componentsPayload(root)) })
+          return
+        }
+        if (req.method === 'POST') {
+          const body = await readBody(req)
+          const action = typeof body.action === 'string' ? body.action : ''
+          if (action !== 'download') {
+            sendJson(res, 400, { error: 'unknown action: download' })
+            return
+          }
+          await startManagedDownload(root, typeof body.id === 'string' ? body.id : '')
+          sendJson(res, 202, { ok: true, ...(await componentsPayload(root)) })
+          return
+        }
+        sendJson(res, 405, { error: 'GET or POST' })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'components route')
 
   })
 

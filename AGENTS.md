@@ -13,7 +13,7 @@
 
 ## 范围
 
-- 本仓库只负责五档上下文压缩、全局规则编辑、GitHub CLI 管理、发布流程、会话发布仓库与音视频工具管理：档位参数、设置页、`compression_tiers` / `compression_context` / `compression_compact` / `github_push` 四个工具、把档位同步进预设隔离域的 `compaction-basic` 引擎、设置页里对 `<DSH home>/AGENTS.md` 的读取与原子写入、托管 `gh` 的下载 / PATH 检测 / 设备码登录 / 网络体检、`github_push` 的发布流程、会话标题旁的在线仓库绑定、ffmpeg / ffprobe 的 PATH 检测与托管下载，以及这两套托管文件的统一下载根目录与整体迁移。
+- 本仓库只负责五档上下文压缩、全局规则编辑、组件管理、发布流程与会话发布仓库：档位参数、设置页、`compression_tiers` / `compression_context` / `compression_compact` / `github_push` 四个工具、把档位同步进预设隔离域的 `compaction-basic` 引擎、设置页里对 `<DSH home>/AGENTS.md` 的读取与原子写入、四套托管组件（GitHub CLI / git / ffmpeg+ffprobe / Python）的 PATH 检测与托管下载、`gh` 的设备码登录与网络体检、`github_push` 的发布流程、会话标题旁的在线仓库绑定，以及四套托管文件共用的下载根目录与整体迁移。
 - 不负责：`dsh-compaction-basic` 本身的压缩算法、会话历史、摘要模型选择、官方 `/compact` 命令；不解析或改写规则内容，只把它当作文本原样保存；不实现 PR/检查/评审/工作树面板本身（官方 `dsh-experimental-forge-bundle` 负责），只保证它找得到已登录的 `gh`。
 - 不做仓库列表面板：1.4.x 的左侧栏「仓库」面板在 1.5.0 删除，1.5.1 又删掉设置页里的默认仓库与推送/建仓/查看动作；1.6.0 只增加会话标题旁按会话绑定的单个在线仓库选择器（`conversation.session.header.actions`）。多仓库场景由智能体在各自会话里调用 `github_push`，不要再加仓库列表或推送按钮。
 - 不提供改写全局规则的智能体工具：高优先级契约只能由人在设置页保存。
@@ -24,11 +24,13 @@
 - 当前策略：`<DSH home>/compression-tiers/settings.json`。引擎配置是派生态，可重建。
 - 全局规则唯一来源：`<DSH home>/AGENTS.md`，由官方 `dsh-agent-instructions` 读取；本插件不复制、不缓存，删文件即等于没有规则。
 - GitHub CLI 版本唯一来源：`src/gh.js` 的 `GH_VERSION`（当前 `2.76.2`）与官方 release URL；托管副本在 `<toolsPath>/gh`，登录凭据在 `gh` 自己的存储里，插件不读取。
-- 下载位置唯一来源：`settings.json` 的 `toolsPath`（空 = `<DSH home>/compression-tiers`），由 `src/tools-path.js` 解析；`gh` 装 `<toolsPath>/gh`、ffmpeg 装 `<toolsPath>/ffmpeg`。任何模块都不得再硬编码用户可见的安装目录。
+- 下载位置唯一来源：`settings.json` 的 `toolsPath`（空 = `<DSH home>/compression-tiers`），由 `src/tools-path.js` 解析；`gh` 装 `<toolsPath>/gh`、git 装 `<toolsPath>/git`、ffmpeg 装 `<toolsPath>/ffmpeg`、Python 装 `<toolsPath>/python`。任何模块都不得再硬编码用户可见的安装目录。
 - 档位参数唯一来源：`src/levels.js` 的 `COMPRESSION`；文档与界面不得写出与之不一致的比例。
 - 发布目录选择唯一来源：`src/push-flow.js` 的 `resolvePushCwd`（显式路径 → 会话工作目录；没有配置项、没有兜底）；插件自己的检出目录不得作为工具默认值。
 - 会话发布目标唯一来源：`settings.json` 的 `sessionRepos`（会话 id → `owner/name`）；`github_push` 把它变成 `https://github.com/<owner/name>.git` 作为 `pushFlow` 的 `target`，没有绑定则回落到 `github.remote`（初始 `origin`）。
 - 音视频托管源唯一来源：`src/ffmpeg.js` 的 `SOURCES`（当前只有 Windows 的 `ffmpeg-release-essentials.zip`）；托管副本在 `<toolsPath>/ffmpeg/bin`，浮动 release 构建，钉住 URL 与安装后的自检。
+- git / Python 托管源唯一来源：`src/components.js` 的 `COMPONENTS`（钉住 MinGit `2.56.1` 与 python-build-standalone `3.11.18+20261110`，资源文件名与版本同步）；托管副本在 `<toolsPath>/git`、`<toolsPath>/python`。
+- 组件行唯一来源：`src/component-rows.js` 的 `COMPONENT_ORDER` 与四个 mapper（gh / git / ffmpeg / python → 统一行）。设置页不得自行拼装某一个组件的状态、版本或路径，也不得再为单个组件加一套状态行。
 - 运行时兼容声明：`package.json` 的 `engines.dsh`（当前 `>=0.2.2-rc.3 <0.3.0`），DSH 加载器据此拒绝不兼容版本。
 - 官方阈值公式：`floor(min(W × thresholdRatio, W − O − 65,536))`，逐字保留 `(W − O) × retainRatio`。
 
@@ -49,9 +51,10 @@
 13. 会话发布仓库只允许改 `github_push` 的推送目标：不得因此克隆仓库、切换分支或改动会话工作区；绑定归一化必须是 `owner/name`，非法值丢弃，最多保留 200 条。
 14. 会话头选择器注册在官方 `conversation.session.header.actions`（id `compression-repo`）；不得改标题、工作区选择器或其它官方 slot 的注册。官方 header 对标题旁动作是 `overflow: clip`，需要渲染到标题下方时只能用 portal 挂到 View 标签行（`[data-conversation-tabs]` 的父节点）并负责清理，拿不到标签行就退回内联。
 15. 设置页只放控件标签、当前值、路径与错误信息。不写教学性说明段（面板介绍、原理、操作步骤、"为什么需要它"）：这类文字写进本文件或 README，界面上的 `intro` / `*Note` 一类键不再新增；旧键删除后不得加回。示例值只能作为输入框 `placeholder`，不能变成段落。
-16. 所有动作按钮必须常显：条件不满足时渲染为 `disabled` 并用 `title`（或同一行的状态文本）说明原因，不得用条件渲染把按钮整个隐藏（弹层、菜单、进度条不在此列，它们不是动作按钮）。设置页现有按钮——档位、规则保存、gh 下载/重新检测/登录、设备码复制/打开授权页/取消、下载位置迁移/恢复默认、音视频下载/重新检测——都按这条执行。
-17. 下载根目录规则：`toolsPath` 只接受绝对路径，非法或相对值回落默认（写库时归一化为空串）；迁移前先做完整预检（目标已有同名组件即拒绝、下载进行中返回 409），两个组件要么都搬、要么都不动；跨卷 `EXDEV` 退化为复制后删除；迁移成功才写 `toolsPath`，失败保留旧值以便重试；迁移后必须把本进程 PATH 里的旧 `bin` 目录换成新的。
-18. 设置页按钮只有一套标准：所有动作按钮经 `actionButton()` 渲染（基础类 `ct-btn`，主操作 `ct-btn--primary` 只加描边与底色，不改尺寸）；每个面板把按钮放进一个 `ct-actions` 行，行内只放按钮、状态文字另起一行；按钮标签走共享键（`downloadIdle` / `downloadKeep` / `downloadContinue` / `downloadRetry` / `downloadRunning` / `downloadDone` / `downloadUnsupported`、`probe`、`stateMissing` / `statePartial` / `stateFailed` / `stateSystem`），禁止再出现 `ghDownload` / `toolsInstall` 这类按面板分裂的副本。GitHub CLI 与音视频两个面板的「下载 / 重新检测」必须结构一致（状态行 → 进度 → 路径/错误 → 同一行两个按钮，下载在左、重新检测在右）。
+16. 所有动作按钮必须常显：条件不满足时渲染为 `disabled` 并用 `title`（或同一行的状态文本）说明原因，不得用条件渲染把按钮整个隐藏（弹层、菜单、进度条不在此列，它们不是动作按钮）。设置页现有按钮——档位、规则保存、组件行下载/重新检测、`gh` 登录、设备码复制/打开授权页/取消、网络体检、下载目录迁移/恢复默认——都按这条执行；组件行在状态还没读到时也要渲染（显示「正在读取…」并置灰），不得整行消失。
+17. 下载根目录规则：`toolsPath` 只接受绝对路径，非法或相对值回落默认（写库时归一化为空串）；迁移前先做完整预检（目标已有同名组件即拒绝、任一下载进行中返回 409），四套组件要么都搬、要么都不动；跨卷 `EXDEV` 退化为复制后删除；迁移成功才写 `toolsPath`，失败保留旧值以便重试；迁移后必须把本进程 PATH 里的旧目录（`gh/bin`、`git/cmd`、`ffmpeg/bin`、`python` 与 `python/Scripts`）换成新的。
+18. 设置页按钮只有一套标准：所有动作按钮经 `actionButton()` 渲染（基础类 `ct-btn`，主操作 `ct-btn--primary` 只加描边与底色，不改尺寸）；每个动作行经 `actionRow()` 渲染为 `ct-actions`，行内只放按钮、状态文字另起一行；按钮标签走共享键（`downloadIdle` / `downloadKeep` / `downloadContinue` / `downloadRetry` / `downloadRunning` / `downloadDone` / `downloadUnsupported`、`probe`、`stateMissing` / `statePartial` / `stateFailed` / `stateSystem`），禁止再出现 `ghDownload` / `toolsInstall` 这类按面板分裂的副本。四套组件行必须结构一致（名称与版本 → 状态行 → 进度 → 路径/错误 → 同一行两个按钮，下载在左、重新检测在右），都由 `downloadControl()` 算出状态与标签。
+19. git / Python 的托管安装：下载用 `COMPONENTS` 里钉住的 URL 与 HTTP Range 续传；解压与暂存必须在 `<toolsPath>/.staging/<id>`（**不能**放在组件目录内，否则整棵树 rename 到 `<root>/<id>` 会踩父目录），先对暂存二进制跑一次 `--version`，通过后整棵树原子替换、失败回滚旧版本；只把 `git/cmd`、`python`、`python/Scripts` 插到本进程 PATH 最前，不写系统环境变量。托管源只有 Windows，其它平台只做 PATH 检测并报「当前系统不可用」。
 
 ## 验证要求
 
@@ -63,8 +66,9 @@
 - 修改 `src/ffmpeg.js` 或 `/compression-tiers/api/ffmpeg` 后，`test/ffmpeg.test.js` 必须覆盖托管源选择、`-version` 解析、PATH 检测与托管优先、状态（missing / partial / installed）与 PATH 前插；真实下载只在临时 home 验证，不写用户 DSH home。
 - 修改会话发布仓库（`sessionRepos`、`/api/github/online`、`/api/github/binding`）后，`test/gh.test.js` 覆盖仓库行解析与 `gh` 缺失分类，`test/store.test.js` 覆盖 `owner/name` 归一化与 200 条上限，`test/client.test.js` 覆盖会话头选择器的注册、选项与状态提示。
 - 修改 `src/http.js` 的 `queryParam` 后，`test/http.test.js` 必须覆盖缺参、空值与非字符串请求。
-- 修改 `src/tools-path.js`、`/compression-tiers/api/tools` 或设置页「下载位置」面板后，`test/tools-path.test.js` 必须覆盖默认根、绝对路径校验、两个组件整体迁移、目标已存在时预检拒绝、下载进行中 409、跨卷 `EXDEV` 回退与「搬一半后重试」；`test/store.test.js` 覆盖 `toolsPath` 归一化，`test/client.test.js` 覆盖迁移与恢复默认按钮的禁用态。
-- 修改设置页文案或按钮后，`test/client.test.js` 必须覆盖：动作按钮常显（含设备码复制 / 打开授权页 / 取消在空闲时仍渲染且 `disabled`）、说明段键已删除（`intro`、`ghToolNote` 等不得回到字典里），以及两个下载面板的按钮一致性（同样的类名、同样的标签键、同样的禁用态、同样的一行顺序）；按面板分裂的标签键（`ghDownload`、`toolsInstall` 等）不得回归。
+- 修改 `src/tools-path.js`、`/compression-tiers/api/tools` 或设置页的下载目录区块后，`test/tools-path.test.js` 必须覆盖默认根、绝对路径校验、四套组件整体迁移、目标已存在时预检拒绝、任一下载进行中 409、跨卷 `EXDEV` 回退与「搬一半后重试」；`test/store.test.js` 覆盖 `toolsPath` 归一化，`test/client.test.js` 覆盖迁移与恢复默认按钮的禁用态。
+- 修改 `src/components.js`、`/compression-tiers/api/components` 或某一行组件后，`test/components.test.js` 必须覆盖钉住的 URL 与资源文件名（含 Python 的 `%2B`）、版本解析、PATH 检测、状态（missing / partial / installed / system）、PATH 前插去重与未知组件/无托管构建的早退；`test/component-rows.test.js` 覆盖四行顺序与 state → ready/managed/system/running 映射；`test/client.test.js` 覆盖四行的按钮一致性。
+- 修改设置页文案或按钮后，`test/client.test.js` 必须覆盖：动作按钮常显（含设备码复制 / 打开授权页 / 取消在空闲时仍渲染且 `disabled`、组件行在状态未到时仍渲染）、说明段键已删除（`intro`、`ghToolNote` 等不得回到字典里），以及四套组件行的按钮一致性（同样的类名、同样的标签键、同样的禁用态、同样的一行顺序）；按面板分裂的标签键（`ghDownload`、`toolsInstall` 等）与已合并的旧面板键（`toolsTitle`、`toolsPathTitle`、`ghTitle`、`ghPathLabel`）都不得回归。
 - 发布前运行 `npm run check:secrets`；新增运行时文件、改 `package.json` 的 `files` 或版本号后同步 `CHANGELOG.md` 并按版本打 tag（`vX.Y.Z`）。
 - 修改 manifest、locale、图标或 `client.js` 注册方式后，检查 `test/manifest.test.js` 全绿。
 - 安装验证以插件页的 `application` 结果与新会话中的工具/设置为准，不以下载或日志推断成功。
@@ -100,3 +104,4 @@
 - 2026-11-19：会话头仓库选择器改用自绘深色弹层（portal 到 body、fixed 定位、role=listbox/option、Esc/外部点击/resize 关闭），不再用原生 select（系统白底 + 浅色文字导致选项不可见）；版本 1.6.4。
 - 2026-11-19：统一下载位置：新增 `src/tools-path.js`（默认根 `<DSH home>/compression-tiers`、绝对路径校验、两组件整体迁移、跨卷回退、下载中 409）与 `/compression-tiers/api/tools`；`src/gh.js` / `src/ffmpeg.js` 的首个参数由 DSH home 改为共享根目录（`<root>/gh`、`<root>/ffmpeg`，默认路径与 1.6.x 完全一致，升级不搬文件），设置页新增「下载位置」面板（迁移 / 恢复默认）。`settings.json` 新增 `toolsPath`。设置页删掉全部教学性说明段（页面 intro、档位点评、规则/GitHub/音视频面板说明、`ghToolNote`、`ghLoginNote`），相关规则写进本文件第 15 条；设备码复制 / 打开授权页 / 取消三个按钮改为常显（不可用时 `disabled` + `title` 说明），遵守第 16 条；版本 1.7.0。
 - 2026-11-20：设置页按钮统一为一套标准（第 18 条）：新增 `actionButton()` / `actionRow()` 与 `ct-btn`、`ct-btn--primary` 样式，删掉旧的 `ct-save`；GitHub CLI 与音视频面板的「下载 / 重新检测」改成同一结构（状态行 → 进度 → 路径/错误 → 一行两个按钮，下载在左、重新检测在右），两个面板的下载控制都由 `downloadControl()` 计算状态与标签；按钮文案合并为共享键（`download*` / `probe` / `state*`），删掉 `ghDownload`、`ghProbe`、`toolsInstall`、`toolsProbe`、`toolsDownloading`、`toolsUnsupported`、`toolsLoading` 等按面板分裂的副本。测试增至 135 条（新增四个按钮一致性用例）；版本 1.7.1。
+- 2026-11-21：**「音视频工具」改为「组件管理」**：GitHub CLI 下载、下载目录迁移与 ffmpeg 检测并进同一栏，并新增 git 与 Python 的托管下载。新增 `src/components.js`（钉住 MinGit `2.56.1` 与 python-build-standalone `3.11.18+20261110`；解压/暂存在 `<toolsPath>/.staging/<id>`，先 `--version` 自检再整棵树原子替换，失败回滚；PATH 前插 `git/cmd`、`python`、`python/Scripts`）与 `src/component-rows.js`（四行统一形状，作为设置页组件行的唯一来源）；新增 `GET/POST /compression-tiers/api/components`；`src/tools-path.js` 的 `TOOL_DIRS` 扩到四套组件，迁移与「下载中 409」覆盖全部四套，`toolsStatus` 改为 `components` 数组。设置页只留三栏（档位、全局规则、组件管理）加一个「GitHub 登录」，`GitHub CLI` 面板只剩账号/设备码/网络体检；删掉 `toolsTitle`、`toolsPathTitle`、`ghTitle`、`ghPathLabel`、`toolsLoadFailed`、`toolsActionFailed`、`toolsPathLoadFailed` 等旧键，`ghPathLabel` 由共享的 `pathLabel` 取代。规则补进第 16/17/18 条并新增第 19 条。测试增至 154 条（新增 `test/components.test.js`、`test/component-rows.test.js`，重写设置页用例）；版本 1.8.0。

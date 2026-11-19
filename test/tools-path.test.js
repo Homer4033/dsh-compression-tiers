@@ -58,22 +58,23 @@ test('an absolute toolsPath wins and is normalized', () => {
   }
 })
 
-test('toolsStatus names both component directories and the running jobs', () => {
+test('toolsStatus names every component directory and the running jobs', () => {
   const home = tempDir()
   try {
     const empty = toolsStatus(home, {})
     assert.equal(empty.path, defaultToolsPath(home))
     assert.equal(empty.isDefault, true)
-    assert.equal(empty.gh.path, join(defaultToolsPath(home), 'gh'))
-    assert.equal(empty.ffmpeg.path, join(defaultToolsPath(home), 'ffmpeg'))
-    assert.equal(empty.gh.exists, false)
-    assert.deepEqual(empty.running, { gh: false, ffmpeg: false })
+    assert.deepEqual(empty.components.map((item) => item.id), TOOL_DIRS)
+    for (const item of empty.components) {
+      assert.equal(item.path, join(defaultToolsPath(home), item.id))
+      assert.equal(item.exists, false)
+    }
+    assert.deepEqual(empty.running, { gh: false, git: false, ffmpeg: false, python: false })
 
     plantedRoot(defaultToolsPath(home))
     const planted = toolsStatus(home, {}, { running: { ffmpeg: true } })
-    assert.equal(planted.gh.exists, true)
-    assert.equal(planted.ffmpeg.exists, true)
-    assert.deepEqual(planted.running, { gh: false, ffmpeg: true })
+    for (const item of planted.components) assert.equal(item.exists, true, `${item.id} exists`)
+    assert.deepEqual(planted.running, { gh: false, git: false, ffmpeg: true, python: false })
   } finally {
     rmSync(home, { recursive: true, force: true })
   }
@@ -85,7 +86,7 @@ test('migration moves both components and leaves the old root empty', () => {
   try {
     const from = plantedRoot(defaultToolsPath(home))
     const report = migrateTools({ home, settings: {}, target })
-    assert.deepEqual(report.moved.sort(), ['ffmpeg', 'gh'])
+    assert.deepEqual(report.moved.sort(), TOOL_DIRS.slice().sort())
     assert.deepEqual(report.failed, [])
     assert.equal(report.from, from)
     assert.equal(report.to, target)
@@ -116,10 +117,10 @@ test('a running download blocks the move', () => {
   const target = tempDir()
   try {
     plantedRoot(defaultToolsPath(home))
-    for (const running of [{ gh: true }, { ffmpeg: true }]) {
+    for (const running of [{ gh: true }, { git: true }, { ffmpeg: true }, { python: true }]) {
       assert.throws(
         () => migrateTools({ home, settings: {}, target, running }),
-        (error) => error.status === 409 && /download is running/.test(error.message),
+        (error) => error.status === 409 && /is downloading/.test(error.message),
       )
     }
     // Nothing moved.
@@ -173,7 +174,7 @@ test('a cross-volume move falls back to copy and delete', () => {
       },
     })
     assert.equal(renamed.length, TOOL_DIRS.length, 'both components were tried with rename first')
-    assert.deepEqual(report.moved.sort(), ['ffmpeg', 'gh'])
+    assert.deepEqual(report.moved.sort(), TOOL_DIRS.slice().sort())
     assert.deepEqual(report.failed, [])
     for (const name of TOOL_DIRS) {
       assert.equal(readFileSync(join(target, name, 'bin', `${name}.txt`), 'utf8'), name)
@@ -193,7 +194,7 @@ test('a second run over half-migrated directories finishes the job', () => {
     // The first run moved gh and then failed on ffmpeg.
     renameSync(join(from, 'gh'), join(target, 'gh'))
     const report = migrateTools({ home, settings: {}, target })
-    assert.deepEqual(report.moved, ['ffmpeg'])
+    assert.deepEqual(report.moved, ['git', 'ffmpeg', 'python'])
     assert.equal(existsSync(join(target, 'gh', 'bin', 'gh.txt')), true)
     assert.equal(existsSync(join(target, 'ffmpeg', 'bin', 'ffmpeg.txt')), true)
     // A third run has nothing left to do and still succeeds.

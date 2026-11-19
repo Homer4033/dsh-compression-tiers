@@ -18,8 +18,20 @@ window.__ModuleLoader__.load({
     const GH_NETWORK_API = '/compression-tiers/api/github/network'
     const GH_ONLINE_API = '/compression-tiers/api/github/online'
     const GH_BINDING_API = '/compression-tiers/api/github/binding'
-    const FFMPEG_API = '/compression-tiers/api/ffmpeg'
+    const COMPONENTS_API = '/compression-tiers/api/components'
     const TOOLS_API = '/compression-tiers/api/tools'
+
+    /**
+     * The rows the component panel always renders, in this order. The payload
+     * fills in state, path and progress; the list itself is fixed so a slow or
+     * failed load still shows every button (disabled) instead of an empty panel.
+     */
+    const COMPONENT_ROWS = [
+      { id: 'gh', name: 'GitHub CLI' },
+      { id: 'git', name: 'git' },
+      { id: 'ffmpeg', name: 'ffmpeg' },
+      { id: 'python', name: 'Python' },
+    ]
 
     const DICTIONARIES = {
       zh: {
@@ -56,8 +68,10 @@ window.__ModuleLoader__.load({
         rulesPathLabel: '文件',
         rulesLoading: '读取中…',
         rulesMissing: '不存在，保存后创建。',
-        toolsPathTitle: '下载位置',
-        toolsPathLabel: '目录',
+        componentsTitle: '组件管理',
+        componentsLoadFailed: '读取组件状态失败：',
+        componentsActionFailed: '操作失败：',
+        toolsPathLabel: '下载目录',
         toolsPathCurrent: '当前目录',
         toolsPathSave: '迁移',
         toolsPathReset: '恢复默认',
@@ -65,8 +79,7 @@ window.__ModuleLoader__.load({
         toolsPathInvalid: '需要绝对路径。',
         toolsPathRunning: '下载中，完成后再迁移。',
         toolsPathFailed: '迁移失败：',
-        toolsPathLoadFailed: '读取下载位置失败：',
-        ghTitle: 'GitHub CLI',
+        ghAuthTitle: 'GitHub 登录',
         probe: '重新检测',
         downloadIdle: '下载',
         downloadKeep: '仍要下载',
@@ -79,7 +92,7 @@ window.__ModuleLoader__.load({
         statePartial: '未完成，可续传',
         stateFailed: '下载失败',
         stateSystem: '系统已安装（PATH）',
-        ghPathLabel: '路径',
+        pathLabel: '路径',
         ghAuthUnknown: '正在读取登录状态…',
         ghAuthUnavailable: '不可登录',
         ghLoggedIn: '已登录：',
@@ -107,13 +120,9 @@ window.__ModuleLoader__.load({
         ghNetworkUnknown: '未知',
         ghDnsOff: 'DNS 不是 GitHub 地址',
         ghScopeMissing: '令牌缺少 repo scope，私有仓库推送会失败。',
-        toolsTitle: '音视频工具',
         toolsNotFound: '未找到',
         toolsManaged: '托管版',
         toolsSystem: '系统 PATH',
-
-        toolsLoadFailed: '读取音视频工具状态失败：',
-        toolsActionFailed: '操作失败：',
         repoSelectLabel: '仓库',
         repoSelectAria: '在线仓库（github_push 的推送目标）',
         repoTitle: 'github_push 默认推送到这个在线仓库',
@@ -160,8 +169,10 @@ window.__ModuleLoader__.load({
         rulesPathLabel: 'File',
         rulesLoading: 'Loading…',
         rulesMissing: 'missing; saving creates it.',
-        toolsPathTitle: 'Download location',
-        toolsPathLabel: 'Directory',
+        componentsTitle: 'Components',
+        componentsLoadFailed: 'Could not read the component state: ',
+        componentsActionFailed: 'Action failed: ',
+        toolsPathLabel: 'Download directory',
         toolsPathCurrent: 'Current directory',
         toolsPathSave: 'Move here',
         toolsPathReset: 'Reset to default',
@@ -169,8 +180,7 @@ window.__ModuleLoader__.load({
         toolsPathInvalid: 'An absolute path is required.',
         toolsPathRunning: 'A download is running; move after it finishes.',
         toolsPathFailed: 'Could not move: ',
-        toolsPathLoadFailed: 'Could not read the download location: ',
-        ghTitle: 'GitHub CLI',
+        ghAuthTitle: 'GitHub sign-in',
         probe: 'Re-check',
         downloadIdle: 'Download',
         downloadKeep: 'Download anyway',
@@ -183,7 +193,7 @@ window.__ModuleLoader__.load({
         statePartial: 'Incomplete, can resume',
         stateFailed: 'Download failed',
         stateSystem: 'System install (PATH)',
-        ghPathLabel: 'Path',
+        pathLabel: 'Path',
         ghAuthUnknown: 'Reading the sign-in state…',
         ghAuthUnavailable: 'cannot sign in',
         ghLoggedIn: 'Signed in: ',
@@ -211,13 +221,9 @@ window.__ModuleLoader__.load({
         ghNetworkUnknown: 'unknown',
         ghDnsOff: 'DNS is not a GitHub address',
         ghScopeMissing: 'The token has no repo scope; pushing a private repository will fail.',
-        toolsTitle: 'Video tools',
         toolsNotFound: 'not found',
         toolsManaged: 'managed',
         toolsSystem: 'system PATH',
-
-        toolsLoadFailed: 'Could not read the video-tool state: ',
-        toolsActionFailed: 'Action failed: ',
         repoSelectLabel: 'Repo',
         repoSelectAria: 'Online repository (the github_push target)',
         repoTitle: 'github_push publishes to this online repository by default',
@@ -493,6 +499,29 @@ window.__ModuleLoader__.load({
 }
 .ct-tool-path {
   color: var(--dsw-alias-label-tertiary);
+  word-break: break-all;
+}
+.ct-component {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+.ct-component:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+.ct-component-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.ct-component-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.ct-component-path {
   word-break: break-all;
 }
 .ct-repo-slot {
@@ -984,18 +1013,19 @@ window.__ModuleLoader__.load({
       const [rulesText, setRulesText] = React.useState('')
       const [rulesMessage, setRulesMessage] = React.useState('')
       const [rulesBusy, setRulesBusy] = React.useState(false)
-      const [gh, setGh] = React.useState(null)
+      // One payload for the whole component panel: the four rows and the shared
+      // download root they all install below.
+      const [components, setComponents] = React.useState(null)
+      const [componentsMessage, setComponentsMessage] = React.useState('')
+      const [componentsBusy, setComponentsBusy] = React.useState(false)
+      const [pathDraft, setPathDraft] = React.useState(null)
+      const [pathBusy, setPathBusy] = React.useState(false)
+      // The gh device-code flow; the gh binary itself is a component row.
+      const [login, setLogin] = React.useState(null)
       const [auth, setAuth] = React.useState(null)
       const [ghMessage, setGhMessage] = React.useState('')
       const [ghBusy, setGhBusy] = React.useState(false)
       const [network, setNetwork] = React.useState(null)
-      const [tools, setTools] = React.useState(null)
-      const [toolsMessage, setToolsMessage] = React.useState('')
-      const [toolsBusy, setToolsBusy] = React.useState(false)
-      const [toolsPath, setToolsPath] = React.useState(null)
-      const [toolsPathDraft, setToolsPathDraft] = React.useState(null)
-      const [toolsPathMessage, setToolsPathMessage] = React.useState('')
-      const [toolsPathBusy, setToolsPathBusy] = React.useState(false)
       const mounted = React.useRef(true)
       const buttons = React.useRef({})
 
@@ -1003,35 +1033,32 @@ window.__ModuleLoader__.load({
         mounted.current = true
         load()
         loadRules()
-        loadGithub()
+        loadComponents()
+        loadLogin()
         loadAuth()
         loadNetwork()
-        loadTools()
-        loadToolsPath()
         return function () {
           mounted.current = false
         }
       }, [])
 
-      const downloading = gh && gh.gh ? gh.gh.state === 'downloading' : false
-      const loggingIn = gh && gh.login ? gh.login.active === true : false
-      React.useEffect(function () {
-        if (!downloading) return undefined
-        const timer = window.setInterval(function () { loadGithub() }, 900)
-        return function () { window.clearInterval(timer) }
-      }, [downloading])
+      const loggingIn = login ? login.active === true : false
       React.useEffect(function () {
         if (!loggingIn) return undefined
-        const timer = window.setInterval(function () { loadGithub() }, 1500)
+        const timer = window.setInterval(function () { loadLogin() }, 1500)
         return function () { window.clearInterval(timer) }
       }, [loggingIn])
 
-      const toolsRunning = tools && tools.download ? tools.download.running === true : false
+      // Any managed install in flight keeps the panel refreshing; the payload
+      // itself reports progress, so no second timer per component is needed.
+      const anyRunning = components && Array.isArray(components.components)
+        ? components.components.some(function (row) { return row && row.running === true })
+        : false
       React.useEffect(function () {
-        if (!toolsRunning) return undefined
-        const timer = window.setInterval(function () { loadTools() }, 1200)
+        if (!anyRunning) return undefined
+        const timer = window.setInterval(function () { loadComponents({ quiet: true }) }, 1200)
         return function () { window.clearInterval(timer) }
-      }, [toolsRunning])
+      }, [anyRunning])
 
       function load() {
         fetch(API, { credentials: 'same-origin' })
@@ -1066,21 +1093,22 @@ window.__ModuleLoader__.load({
           })
       }
 
-      function applyGithub(body) {
-        setGh({ gh: body && body.gh ? body.gh : null, login: body && body.login ? body.login : null })
+      /** The device-code flow state; the gh binary lives in the component rows. */
+      function applyLogin(body) {
+        setLogin(body && body.login ? body.login : null)
       }
 
-      function loadGithub() {
+      function loadLogin() {
         return fetch(GH_API, { credentials: 'same-origin' })
           .then(readJson)
           .then(function (body) {
             if (!mounted.current) return
-            applyGithub(body)
+            applyLogin(body)
             if (body && body.login && body.login.state === 'success') loadAuth()
           })
           .catch(function (error) {
             if (!mounted.current) return
-            setGhMessage(t('ghLoadFailed') + (error && error.message ? error.message : String(error)))
+            setGhMessage(t('ghLoadFailed') + messageOf(error))
           })
       }
 
@@ -1104,28 +1132,6 @@ window.__ModuleLoader__.load({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
         }).then(readJson)
-      }
-
-      function applyLogin(body) {
-        setGh(function (current) { return { gh: current ? current.gh : null, login: body } })
-      }
-
-      function downloadGh() {
-        if (ghBusy) return
-        setGhBusy(true)
-        setGhMessage('')
-        githubAction({ action: 'download' })
-          .then(function (body) {
-            if (!mounted.current) return
-            setGh(function (current) { return { gh: body.gh || null, login: current ? current.login : null } })
-          })
-          .catch(function (error) {
-            if (!mounted.current) return
-            setGhMessage(t('ghActionFailed') + (error && error.message ? error.message : String(error)))
-          })
-          .then(function () {
-            if (mounted.current) setGhBusy(false)
-          })
       }
 
       function loginGh() {
@@ -1165,7 +1171,6 @@ window.__ModuleLoader__.load({
       }
 
       function copyCode() {
-        const login = gh && gh.login
         if (!login || !login.code) return
         try {
           if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
@@ -1182,7 +1187,6 @@ window.__ModuleLoader__.load({
       }
 
       function openDevice() {
-        const login = gh && gh.login
         const url = login && login.url ? login.url : 'https://github.com/login/device'
         window.open(url, '_blank', 'noopener,noreferrer')
       }
@@ -1200,38 +1204,56 @@ window.__ModuleLoader__.load({
           })
       }
 
-      function loadTools() {
-        return fetch(FFMPEG_API, { credentials: 'same-origin' })
+      /**
+       * The four component rows plus the shared download root. `quiet` keeps the
+       * current status line (a refetch after an action must not erase its own
+       * "migrated" message).
+       */
+      function loadComponents(options) {
+        const quiet = Boolean(options && options.quiet)
+        return fetch(COMPONENTS_API, { credentials: 'same-origin' })
           .then(readJson)
           .then(function (body) {
             if (!mounted.current) return
-            setTools(body)
-            setToolsMessage('')
+            setComponents(body)
+            if (!quiet) setComponentsMessage('')
           })
           .catch(function (error) {
             if (!mounted.current) return
-            setToolsMessage(t('toolsLoadFailed') + messageOf(error))
+            setComponentsMessage(t('componentsLoadFailed') + messageOf(error))
           })
       }
 
-      function loadToolsPath() {
-        return fetch(TOOLS_API, { credentials: 'same-origin' })
+      /** Start one component's managed install; the poll shows its progress. */
+      function downloadComponent(id) {
+        if (componentsBusy) return
+        setComponentsBusy(true)
+        setComponentsMessage('')
+        fetch(COMPONENTS_API, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: id, action: 'download' }),
+        })
           .then(readJson)
           .then(function (body) {
             if (!mounted.current) return
-            setToolsPath(body || null)
+            setComponents(body)
           })
           .catch(function (error) {
             if (!mounted.current) return
-            setToolsPathMessage(t('toolsPathLoadFailed') + messageOf(error))
+            setComponentsMessage(t('componentsActionFailed') + messageOf(error))
+          })
+          .then(function () {
+            if (mounted.current) setComponentsBusy(false)
           })
       }
 
-      /** Move both managed components to `target` and persist it. */
-      function migrateToolsPath(target) {
-        if (toolsPathBusy) return
-        setToolsPathBusy(true)
-        setToolsPathMessage('')
+      /** Move every managed component to `target` and persist it. */
+      function migratePath(target) {
+        if (pathBusy) return
+        setPathBusy(true)
+        setComponentsMessage('')
         fetch(TOOLS_API, {
           method: 'POST',
           credentials: 'same-origin',
@@ -1241,44 +1263,18 @@ window.__ModuleLoader__.load({
           .then(readJson)
           .then(function (body) {
             if (!mounted.current) return
-            setToolsPath(body || null)
-            setToolsPathDraft(null)
-            setToolsPathMessage(t('toolsPathSaved'))
-            // Both binary locations changed: the two status panels are stale.
-            loadGithub()
-            loadTools()
+            setPathDraft(null)
+            setComponentsMessage(t('toolsPathSaved'))
+            // Every binary location changed, so every row is stale.
+            loadComponents({ quiet: true })
           })
           .catch(function (error) {
             if (!mounted.current) return
-            setToolsPathMessage(t('toolsPathFailed') + messageOf(error))
-            loadToolsPath()
+            setComponentsMessage(t('toolsPathFailed') + messageOf(error))
+            loadComponents({ quiet: true })
           })
           .then(function () {
-            if (mounted.current) setToolsPathBusy(false)
-          })
-      }
-
-      function downloadTools() {
-        if (toolsBusy) return
-        setToolsBusy(true)
-        setToolsMessage('')
-        fetch(FFMPEG_API, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'download' }),
-        })
-          .then(readJson)
-          .then(function (body) {
-            if (!mounted.current) return
-            setTools(body)
-          })
-          .catch(function (error) {
-            if (!mounted.current) return
-            setToolsMessage(t('toolsActionFailed') + messageOf(error))
-          })
-          .then(function () {
-            if (mounted.current) setToolsBusy(false)
+            if (mounted.current) setPathBusy(false)
           })
       }
 
@@ -1349,9 +1345,9 @@ window.__ModuleLoader__.load({
       }
 
       /**
-       * The one download control shared by the GitHub CLI and video-tool
-       * panels: identical state line and button label for identical states, so
-       * the two panels cannot drift into different-looking controls again.
+       * The one download control shared by every component row: identical state
+       * line and button label for identical states, so the four rows (and any
+       * component added later) cannot drift into different-looking controls.
        */
       function downloadControl(model) {
         const loading = model.loading === true
@@ -1451,19 +1447,110 @@ window.__ModuleLoader__.load({
           ? h('p', { className: 'ct-note' }, t('rulesPathLabel') + t('sep') + rules.path + (rules.exists === false ? ' — ' + t('rulesMissing') : ''))
           : null)
 
-      const ghItem = gh && gh.gh ? gh.gh : null
-      const login = gh && gh.login ? gh.login : null
-      const ghControl = downloadControl({
-        loading: !ghItem,
-        unsupported: Boolean(ghItem && ghItem.supported === false),
-        running: Boolean(ghItem && ghItem.state === 'downloading'),
-        installed: Boolean(ghItem && ghItem.state === 'installed'),
-        partial: Boolean(ghItem && ghItem.state === 'partial'),
-        failed: Boolean(ghItem && ghItem.state === 'error'),
-        system: Boolean(ghItem && ghItem.state === 'system'),
-        percent: ghItem ? ghItem.percent : null,
+      // ---- component panel: four rows plus the download root they share ----
+      const rootInfo = components && components.root ? components.root : null
+      const rootPath = rootInfo && rootInfo.path ? String(rootInfo.path) : ''
+      const rootDefault = rootInfo && rootInfo.defaultPath ? String(rootInfo.defaultPath) : ''
+      const rootRunning = Boolean(rootInfo && rootInfo.running && COMPONENT_ROWS.some(function (def) {
+        return rootInfo.running[def.id] === true
+      }))
+      const rowsById = {}
+      if (components && Array.isArray(components.components)) {
+        components.components.forEach(function (row) {
+          if (row && row.id) rowsById[row.id] = row
+        })
+      }
+      // Every row renders through the one download control and the one button
+      // standard; a component whose payload has not arrived still renders its
+      // two buttons, disabled, instead of vanishing from the panel.
+      const componentNodes = COMPONENT_ROWS.map(function (def) {
+        const row = rowsById[def.id] || null
+        const control = downloadControl({
+          loading: !row,
+          unsupported: Boolean(row && row.supported === false),
+          running: Boolean(row && row.state === 'downloading'),
+          installed: Boolean(row && row.state === 'installed'),
+          partial: Boolean(row && row.state === 'partial'),
+          failed: Boolean(row && row.state === 'error'),
+          system: Boolean(row && row.state === 'system'),
+          percent: row ? row.percent : null,
+        })
+        const pinned = row && row.version ? ' · v' + row.version : ''
+        const used = row && row.toolVersion ? ' (' + row.toolVersion + ')' : ''
+        const bar = Boolean(row) && row.percent != null
+          && (row.state === 'downloading' || row.state === 'partial' || row.state === 'error')
+        return h('div', { className: 'ct-component', key: def.id },
+          h('div', { className: 'ct-component-head' },
+            h('strong', { className: 'ct-component-name' }, row && row.name ? row.name : def.name),
+            h('span', { className: 'ct-note' }, control.stateText + pinned + used)),
+          bar ? h('div', { className: 'ct-progress' }, h('span', { style: { width: (row.percent || 0) + '%' } })) : null,
+          row && row.path ? h('p', { className: 'ct-note ct-component-path' }, t('pathLabel') + t('sep') + row.path) : null,
+          row && row.tools
+            ? h('div', { className: 'ct-tools-list' }, row.tools.map(function (tool) {
+              return h('div', { className: 'ct-tool', key: tool.name },
+                h('span', { className: 'ct-tool-name' }, tool.name),
+                h('span', { className: 'ct-note' }, (tool.managed ? t('toolsManaged') : t('toolsSystem')) + (tool.version ? ' v' + tool.version : '')),
+                tool.path ? h('span', { className: 'ct-tool-path' }, tool.path) : null)
+            }))
+            : null,
+          row && row.error ? h('p', { className: 'ct-status', role: 'alert' }, row.error) : null,
+          actionRow([
+            actionButton('download:' + def.id, control.label, {
+              disabled: componentsBusy || control.disabled,
+              onClick: function () { downloadComponent(def.id) },
+              primary: true,
+            }),
+            actionButton('probe:' + def.id, t('probe'), { onClick: function () { loadComponents(); loadAuth() } }),
+          ]))
       })
-      const ghStatusText = ghControl.stateText + (ghItem && ghItem.version ? ' · v' + ghItem.version : '')
+
+      // The shared download root sits in the same panel: it is what a component
+      // installs below, so moving it is a component action. Both buttons stay
+      // rendered and go disabled while a download runs or the draft is unchanged.
+      const pathValue = pathDraft === null ? rootPath : pathDraft
+      const pathClean = String(pathValue == null ? '' : pathValue).trim()
+      const pathInvalid = pathClean.length > 0 && !looksAbsolute(pathClean)
+      const pathChanged = rootPath !== '' && !samePathDraft(pathClean, rootPath)
+      const pathDisabled = pathBusy || rootRunning || !rootPath || !pathClean || pathInvalid || !pathChanged
+      const pathTitle = rootRunning ? t('toolsPathRunning') : pathInvalid ? t('toolsPathInvalid') : ''
+      const pathBlock = h('div', { className: 'ct-rules-head' },
+        h('label', { className: 'ct-field' },
+          h('span', null, t('toolsPathLabel')),
+          h('div', { className: 'ct-row' },
+            h('input', {
+              className: 'ct-input',
+              type: 'text',
+              spellCheck: false,
+              value: pathValue,
+              placeholder: rootDefault,
+              disabled: pathBusy,
+              onChange: function (event) { setPathDraft(event.target.value) },
+            }))),
+        h('p', { className: 'ct-note' }, rootPath
+          ? t('toolsPathCurrent') + t('sep') + rootPath
+          : (componentsMessage ? '' : t('loading'))),
+        rootRunning ? h('p', { className: 'ct-note' }, t('toolsPathRunning')) : null,
+        actionRow([
+          actionButton('toolsPathMigrate', pathBusy ? t('rulesSaving') : t('toolsPathSave'), {
+            disabled: pathDisabled,
+            title: pathTitle,
+            onClick: function () { migratePath(pathClean) },
+            primary: true,
+          }),
+          actionButton('toolsPathReset', t('toolsPathReset'), {
+            disabled: pathBusy || rootRunning || !rootDefault || samePathDraft(rootPath, rootDefault),
+            title: rootRunning ? t('toolsPathRunning') : '',
+            onClick: function () { migratePath(rootDefault) },
+          }),
+        ]))
+
+      const componentsPanel = h('section', { className: 'ct-panel' },
+        h('div', { className: 'ct-rules-head' },
+          h('h3', null, t('componentsTitle'))),
+        componentNodes,
+        pathBlock,
+        h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, componentsMessage))
+
       const authText = auth === null
         ? t('ghAuthUnknown')
         : !auth.available
@@ -1522,28 +1609,11 @@ window.__ModuleLoader__.load({
           actionButton('ghNetwork', t('ghNetwork'), { onClick: function () { loadNetwork() } }),
         ]))
 
-      // Same shape as the video panel below: title, one state line, the
-      // progress bar, path/error lines, then one action row with the same two
-      // buttons in the same order.
-      const ghPanel = h('section', { className: 'ct-panel' },
+      // The signed-in account, the device flow and the network probe. The `gh`
+      // binary itself is one row in the component panel above.
+      const ghAuthPanel = h('section', { className: 'ct-panel' },
         h('div', { className: 'ct-rules-head' },
-          h('h3', null, t('ghTitle'))),
-        h('p', { className: 'ct-note' }, ghStatusText),
-        ghItem && (ghItem.state === 'downloading' || ghItem.state === 'partial') && ghItem.percent != null
-          ? h('div', { className: 'ct-progress' }, h('span', { style: { width: ghItem.percent + '%' } }))
-          : null,
-        ghItem && ghItem.binaryPath
-          ? h('p', { className: 'ct-note' }, t('ghPathLabel') + t('sep') + ghItem.binaryPath)
-          : null,
-        ghItem && ghItem.error ? h('p', { className: 'ct-status', role: 'alert' }, ghItem.error) : null,
-        actionRow([
-          actionButton('ghDownload', ghControl.label, {
-            disabled: ghBusy || ghControl.disabled,
-            onClick: downloadGh,
-            primary: true,
-          }),
-          actionButton('ghProbe', t('probe'), { onClick: function () { loadGithub(); loadAuth() } }),
-        ]),
+          h('h3', null, t('ghAuthTitle'))),
         h('p', { className: 'ct-note' }, authText),
         actionRow([
           actionButton('ghLogin', auth && auth.authenticated ? t('ghRelogin') : t('ghLogin'), {
@@ -1559,110 +1629,13 @@ window.__ModuleLoader__.load({
         networkBlock,
         ghMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, ghMessage) : null)
 
-      const toolsItem = tools
-      const toolsDownload = toolsItem && toolsItem.download ? toolsItem.download : null
-      const toolsSupported = toolsItem ? toolsItem.supported !== false : false
-      const toolsRunningNow = toolsDownload ? toolsDownload.running === true : false
-      const toolsInstalled = toolsItem ? toolsItem.state === 'installed' : false
-      const toolsControl = downloadControl({
-        loading: !toolsItem,
-        unsupported: Boolean(toolsItem && toolsItem.supported === false),
-        running: toolsRunningNow,
-        installed: toolsInstalled,
-        partial: Boolean(toolsItem && toolsItem.state === 'partial'),
-        failed: Boolean(toolsDownload && toolsDownload.error),
-        system: Boolean(toolsItem && toolsItem.state === 'installed' && toolsItem.ffmpeg && toolsItem.ffmpeg.managed === false),
-        percent: toolsDownload ? toolsDownload.percent : null,
-      })
-      const toolsStatusText = toolsControl.stateText + (toolsItem && toolsItem.version ? ' · v' + toolsItem.version : '')
-      const toolRow = function (name, info) {
-        const version = info && info.version ? ' v' + info.version : ''
-        const origin = !info
-          ? t('toolsNotFound')
-          : (info.managed ? t('toolsManaged') : t('toolsSystem')) + version
-        return h('div', { className: 'ct-tool', key: name },
-          h('span', { className: 'ct-tool-name' }, name),
-          h('span', { className: 'ct-note' }, origin),
-          info && info.path ? h('span', { className: 'ct-tool-path' }, info.path) : null)
-      }
-      const toolsPanel = h('section', { className: 'ct-panel' },
-        h('div', { className: 'ct-rules-head' },
-          h('h3', null, t('toolsTitle'))),
-        h('p', { className: 'ct-note' }, toolsStatusText),
-        h('div', { className: 'ct-tools-list' },
-          toolRow('ffmpeg', toolsItem ? toolsItem.ffmpeg : null),
-          toolRow('ffprobe', toolsItem ? toolsItem.ffprobe : null)),
-        toolsRunningNow || (toolsDownload && toolsDownload.error && toolsDownload.percent != null)
-          ? h('div', { className: 'ct-progress' }, h('span', { style: { width: (toolsDownload.percent || 0) + '%' } }))
-          : null,
-        toolsDownload && toolsDownload.error
-          ? h('p', { className: 'ct-status', role: 'alert' }, toolsDownload.error)
-          : null,
-        actionRow([
-          actionButton('toolsDownload', toolsControl.label, {
-            disabled: toolsBusy || !toolsItem || toolsControl.disabled,
-            onClick: downloadTools,
-            primary: true,
-          }),
-          actionButton('toolsProbe', t('probe'), { onClick: function () { loadTools() } }),
-        ]),
-        toolsMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsMessage) : null)
-
-      // One download root for both managed tools. The move button is always
-      // rendered and disabled while a download runs or the draft is unchanged.
-      const toolsPathCurrent = toolsPath && toolsPath.path ? String(toolsPath.path) : ''
-      const toolsPathDefault = toolsPath && toolsPath.defaultPath ? String(toolsPath.defaultPath) : ''
-      const toolsPathDraftValue = toolsPathDraft === null ? toolsPathCurrent : toolsPathDraft
-      const toolsPathClean = toolsPathDraftValue.trim()
-      const toolsPathRunningNow = Boolean(toolsPath && toolsPath.running && (toolsPath.running.gh || toolsPath.running.ffmpeg))
-      const toolsPathInvalid = toolsPathClean.length > 0 && !looksAbsolute(toolsPathClean)
-      const toolsPathChanged = toolsPathCurrent !== '' && !samePathDraft(toolsPathClean, toolsPathCurrent)
-      const toolsPathDisabled = toolsPathBusy || toolsPathRunningNow || !toolsPathCurrent || !toolsPathClean || toolsPathInvalid || !toolsPathChanged
-      const toolsPathInputTitle = toolsPathRunningNow
-        ? t('toolsPathRunning')
-        : toolsPathInvalid ? t('toolsPathInvalid') : ''
-      const toolsPathPanel = h('section', { className: 'ct-panel' },
-        h('div', { className: 'ct-rules-head' },
-          h('h3', null, t('toolsPathTitle'))),
-        h('label', { className: 'ct-field' },
-          h('span', null, t('toolsPathLabel')),
-          h('div', { className: 'ct-row' },
-            h('input', {
-              className: 'ct-input',
-              type: 'text',
-              spellCheck: false,
-              value: toolsPathDraftValue,
-              placeholder: toolsPathDefault,
-              disabled: toolsPathBusy,
-              onChange: function (event) { setToolsPathDraft(event.target.value) },
-            }))),
-        h('p', { className: 'ct-note' }, toolsPathCurrent
-          ? t('toolsPathCurrent') + t('sep') + toolsPathCurrent
-          : (toolsPathMessage ? '' : t('loading'))),
-        toolsPathRunningNow ? h('p', { className: 'ct-note' }, t('toolsPathRunning')) : null,
-        actionRow([
-          actionButton('toolsPathMigrate', toolsPathBusy ? t('rulesSaving') : t('toolsPathSave'), {
-            disabled: toolsPathDisabled,
-            title: toolsPathInputTitle,
-            onClick: function () { migrateToolsPath(toolsPathClean) },
-            primary: true,
-          }),
-          actionButton('toolsPathReset', t('toolsPathReset'), {
-            disabled: toolsPathBusy || toolsPathRunningNow || !toolsPathDefault || samePathDraft(toolsPathCurrent, toolsPathDefault),
-            title: toolsPathRunningNow ? t('toolsPathRunning') : '',
-            onClick: function () { migrateToolsPath(toolsPathDefault) },
-          }),
-        ]),
-        h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsPathMessage))
-
       return h('section', { className: 'ct-page' },
         h('header', { className: 'ct-head' },
           h('h2', null, t('title'))),
         panel,
         rulesPanel,
-        toolsPathPanel,
-        ghPanel,
-        toolsPanel,
+        componentsPanel,
+        ghAuthPanel,
         state
           ? h('div', { className: 'ct-meta' },
             h('span', null, t('engines') + t('sep') + engineCount),
