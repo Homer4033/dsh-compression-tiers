@@ -19,12 +19,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Homer4033/dsh-compression-tiers.git"
+    "url": "git+https://github.com/Homer4033/dsh-harness-toolbox.git"
   },
   "bugs": {
-    "url": "https://github.com/Homer4033/dsh-compression-tiers/issues"
+    "url": "https://github.com/Homer4033/dsh-harness-toolbox/issues"
   },
-  "homepage": "https://github.com/Homer4033/dsh-compression-tiers#readme",
+  "homepage": "https://github.com/Homer4033/dsh-harness-toolbox#readme",
   "main": "./index.js",
   "exports": {
     ".": "./index.js",
