@@ -565,21 +565,82 @@ window.__ModuleLoader__.load({
   height: 12px;
   color: var(--dsw-alias-label-tertiary);
 }
-.ct-repo-select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  opacity: 0;
-  font: inherit;
+.ct-repo-pill {
+  font-family: inherit;
   cursor: pointer;
 }
-.ct-repo-select:disabled {
+.ct-repo-pill:disabled {
+  opacity: 0.55;
   cursor: default;
+}
+.ct-repo-menu {
+  position: fixed;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  max-height: 300px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 16px;
+}
+.ct-repo-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ct-repo-option:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+.ct-repo-option:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+.ct-repo-option-on {
+  background: var(--dsw-alias-bg-module-platform);
+}
+.ct-repo-check {
+  flex: none;
+  width: 12px;
+  color: var(--dsw-alias-state-business-primary);
+}
+.ct-repo-option-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ct-repo-tag {
+  flex: none;
+  margin-left: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+.ct-repo-menu-note {
+  margin: 4px 8px 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
 }
 .ct-repo-note {
   max-width: 180px;
@@ -676,10 +737,14 @@ window.__ModuleLoader__.load({
       const [bound, setBound] = React.useState('')
       const [note, setNote] = React.useState(repoCache.repos ? '' : t('repoLoading'))
       const [busy, setBusy] = React.useState(false)
+      const [open, setOpen] = React.useState(false)
       // The pill is portaled into the View tab strip: the official header clips
       // title-adjacent actions, so it cannot render below the title in place.
       const [host, setHost] = React.useState(null)
       const anchor = React.useRef(null)
+      const pillRef = React.useRef(null)
+      const menuRef = React.useRef(null)
+      const placement = React.useRef(null)
       const mounted = React.useRef(true)
 
       React.useEffect(function () {
@@ -724,8 +789,7 @@ window.__ModuleLoader__.load({
         }
       }, [sessionId])
 
-      function selectRepo(event) {
-        const value = event && event.target ? event.target.value : ''
+      function selectRepo(value) {
         if (!sessionId) return
         setBusy(true)
         setNote('')
@@ -749,20 +813,71 @@ window.__ModuleLoader__.load({
           })
       }
 
+      function chooseRepo(value) {
+        setOpen(false)
+        selectRepo(value)
+      }
+
+      function toggleMenu() {
+        if (open) {
+          setOpen(false)
+          return
+        }
+        const node = pillRef.current
+        if (!node || typeof node.getBoundingClientRect !== 'function') return
+        const rect = node.getBoundingClientRect()
+        placement.current = {
+          top: Math.round(rect.bottom + 6),
+          left: Math.round(rect.left),
+          width: Math.max(240, Math.round(rect.width)),
+        }
+        setOpen(true)
+      }
+
+      React.useEffect(function () {
+        if (!open) return undefined
+        const doc = typeof document === 'undefined' ? null : document
+        const win = typeof window === 'undefined' ? null : window
+        const onDown = function (event) {
+          const target = event && event.target
+          if (pillRef.current && target && pillRef.current.contains(target)) return
+          if (menuRef.current && target && menuRef.current.contains(target)) return
+          setOpen(false)
+        }
+        const onKey = function (event) {
+          if (event.key === 'Escape') setOpen(false)
+        }
+        const onResize = function () { setOpen(false) }
+        if (doc) doc.addEventListener('mousedown', onDown)
+        if (doc) doc.addEventListener('keydown', onKey)
+        if (win) win.addEventListener('resize', onResize)
+        return function () {
+          if (doc) doc.removeEventListener('mousedown', onDown)
+          if (doc) doc.removeEventListener('keydown', onKey)
+          if (win) win.removeEventListener('resize', onResize)
+        }
+      }, [open])
+
       const rows = Array.isArray(repos) ? repos : []
-      const options = [h('option', { key: '__none', value: '' }, t('repoNone'))]
       const known = new Set(rows.map(function (row) { return row.nameWithOwner }))
-      // A bound repository the listing no longer returns must still be selectable.
-      if (bound && !known.has(bound)) options.push(h('option', { key: '__bound', value: bound }, bound))
+      const items = [{ value: '', label: t('repoNone'), private: false }]
+      // A bound repository the listing no longer returns must stay selectable.
+      if (bound && !known.has(bound)) items.push({ value: bound, label: bound, private: false })
       rows.forEach(function (row) {
-        options.push(h('option', { key: row.nameWithOwner, value: row.nameWithOwner },
-          row.nameWithOwner + (row.private ? ' · ' + t('repoPrivate') : '')))
+        items.push({ value: row.nameWithOwner, label: row.nameWithOwner, private: row.private === true })
       })
 
-      const pill = h('span', {
+      const pill = h('button', {
+        type: 'button',
+        ref: pillRef,
         className: 'ct-repo-pill',
         'data-bound': bound ? 'true' : 'false',
+        'aria-haspopup': 'listbox',
+        'aria-expanded': open ? 'true' : 'false',
+        'aria-label': t('repoSelectAria'),
         title: note ? t('repoTitle') + ' — ' + note : t('repoTitle'),
+        disabled: busy || !sessionId,
+        onClick: toggleMenu,
       },
       h('svg', {
         className: 'ct-repo-icon',
@@ -785,17 +900,36 @@ window.__ModuleLoader__.load({
         strokeLinecap: 'round',
         strokeLinejoin: 'round',
         'aria-hidden': 'true',
-      }, h('path', { d: 'M4.5 6.25 8 9.75l3.5-3.5' })),
-      h('select', {
-        className: 'ct-repo-select',
-        value: bound,
-        disabled: busy || !sessionId,
-        'aria-label': t('repoSelectAria'),
-        onChange: selectRepo,
-      }, options))
+      }, h('path', { d: 'M4.5 6.25 8 9.75l3.5-3.5' })))
+
+      const at = placement.current || { top: 0, left: 0, width: 240 }
+      const menu = open && ReactDOM && typeof ReactDOM.createPortal === 'function'
+        ? ReactDOM.createPortal(h('div', {
+          ref: menuRef,
+          className: 'ct-repo-menu',
+          role: 'listbox',
+          'aria-label': t('repoSelectAria'),
+          style: { top: at.top + 'px', left: at.left + 'px', width: at.width + 'px' },
+        },
+        items.map(function (item) {
+          const selected = item.value === bound
+          return h('button', {
+            key: item.value || '__none',
+            type: 'button',
+            role: 'option',
+            'aria-selected': selected ? 'true' : 'false',
+            className: 'ct-repo-option' + (selected ? ' ct-repo-option-on' : ''),
+            onClick: function () { chooseRepo(item.value) },
+          },
+          h('span', { className: 'ct-repo-check' }, selected ? '✓' : ''),
+          h('span', { className: 'ct-repo-option-name' }, item.label),
+          item.private ? h('span', { className: 'ct-repo-tag' }, t('repoPrivate')) : null)
+        })), document.body)
+        : null
 
       const group = h('span', { className: 'ct-repo-group' },
         pill,
+        menu,
         note ? h('span', { className: 'ct-repo-note', role: 'status', title: note }, note) : null)
 
       const portal = host && ReactDOM && typeof ReactDOM.createPortal === 'function'

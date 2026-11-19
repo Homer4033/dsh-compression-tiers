@@ -99,7 +99,7 @@ function render(states) {
   const { module } = loadClient()
   const registrations = []
   const dictionaries = {}
-  module.factory(() => fakeReact(states)).apply(sectionContext(registrations, dictionaries))
+  module.factory((specifier) => (specifier === 'react-dom' ? { createPortal: (node) => node } : fakeReact(states))).apply(sectionContext(registrations, dictionaries))
   const section = registrations.find((item) => item.options.name === 'settings.section')
   assert.ok(section, 'the settings section is registered')
   const element = section.component()
@@ -111,7 +111,7 @@ function render(states) {
 function renderHeader(states, props) {
   const { module } = loadClient()
   const registrations = []
-  module.factory(() => fakeReact(states)).apply(sectionContext(registrations))
+  module.factory((specifier) => (specifier === 'react-dom' ? { createPortal: (node) => node } : fakeReact(states))).apply(sectionContext(registrations))
   const header = registrations.find((item) => item.options.name === 'conversation.session.header.actions')
   assert.ok(header, 'the session header action is registered')
   return collect(header.component(props))
@@ -321,38 +321,47 @@ test('the GitHub CLI panel shows the installed binary and the signed-in account'
   assert.equal(install.props.disabled, true)
 })
 
-test('the session header selects one online repository for the session', () => {
+test('the session header renders a repository pill that opens a listbox', () => {
   const repos = [
     { nameWithOwner: 'Homer4033/dsh-compression-tiers', private: false },
     { nameWithOwner: 'Homer4033/private-notes', private: true },
   ]
-  const nodes = renderHeader([repos, 'Homer4033/dsh-compression-tiers', '', false], {
+  const nodes = renderHeader([repos, 'Homer4033/dsh-compression-tiers', '', false, true, null], {
     sessionId: 'session-a',
     t: (key) => key,
   })
-  const select = nodes.find((node) => node.type === 'select')
-  assert.ok(select, 'the header renders a repository select')
-  assert.equal(select.props.value, 'Homer4033/dsh-compression-tiers')
-  assert.equal(select.props['aria-label'], 'repoSelectAria')
-  assert.equal(select.props.disabled, false)
-  const options = optionsOf(select)
-  assert.deepEqual(options.map((option) => option.props.value), [
-    '',
+  const pill = nodes.find((node) => String(node.props.className || '') === 'ct-repo-pill')
+  assert.ok(pill, 'the header renders a pill button')
+  assert.equal(pill.type, 'button')
+  assert.equal(pill.props['aria-haspopup'], 'listbox')
+  assert.equal(pill.props['aria-expanded'], 'true')
+  assert.equal(pill.props['data-bound'], 'true')
+  assert.equal(pill.props.disabled, false)
+  assert.equal(
+    textOf(nodes.find((node) => String(node.props.className || '') === 'ct-repo-value')),
     'Homer4033/dsh-compression-tiers',
-    'Homer4033/private-notes',
+  )
+  const menu = nodes.find((node) => String(node.props.className || '') === 'ct-repo-menu')
+  assert.ok(menu, 'the open pill renders its listbox')
+  assert.equal(menu.props.role, 'listbox')
+  assert.equal(menu.props.style.width, '240px')
+  const options = nodes.filter((node) => String(node.props.className || '').split(' ').includes('ct-repo-option'))
+  assert.deepEqual(options.map((option) => option.props['aria-selected']), ['false', 'true', 'false'])
+  assert.deepEqual(options.map((option) => deepText(option)), [
+    'repoNone',
+    '✓Homer4033/dsh-compression-tiers',
+    'Homer4033/private-notesrepoPrivate',
   ])
-  assert.equal(textOf(options[0]), 'repoNone')
-  assert.equal(textOf(options[2]), 'Homer4033/private-notes · repoPrivate')
 })
 
-test('a binding the account no longer lists stays selectable; no session disables the select', () => {
-  const nodes = renderHeader([[], 'Homer4033/retired', '', false], { sessionId: 'session-b', t: (key) => key })
-  const select = nodes.find((node) => node.type === 'select')
-  assert.equal(select.props.value, 'Homer4033/retired')
-  assert.deepEqual(optionsOf(select).map((option) => option.props.value), ['', 'Homer4033/retired'])
-
-  const withoutSession = renderHeader([[], '', '', false], { t: (key) => key })
-  assert.equal(withoutSession.find((node) => node.type === 'select').props.disabled, true)
+test('a retired binding stays selectable; a closed pill renders no listbox', () => {
+  const retired = renderHeader([[], 'Homer4033/retired', '', false, true, null], { sessionId: 'session-b', t: (key) => key })
+  const options = retired.filter((node) => String(node.props.className || '').split(' ').includes('ct-repo-option'))
+  assert.deepEqual(options.map((option) => deepText(option)), ['repoNone', '✓Homer4033/retired'])
+  const closed = renderHeader([[], '', '', false, false, null], { sessionId: 'session-b', t: (key) => key })
+  assert.equal(closed.some((node) => String(node.props.className || '') === 'ct-repo-menu'), false)
+  const disabled = renderHeader([[], '', '', false], { t: (key) => key })
+  assert.equal(disabled.find((node) => String(node.props.className || '') === 'ct-repo-pill').props.disabled, true)
 })
 
 test('the header explains an unreadable repository list', () => {
@@ -362,7 +371,6 @@ test('the header explains an unreadable repository list', () => {
   assert.equal(note.props.role, 'status')
   assert.equal(textOf(note), 'repoUnavailable')
 })
-
 test('the video-tool panel reports both binaries and disables the install button', () => {
   const tools = {
     supported: true,
@@ -423,7 +431,7 @@ test('the video-tool button says loading until the status arrives', () => {
   assert.equal(button.props.disabled, true)
 })
 
-test('the repository pill shows the bound name and keeps the select inside it', () => {
+test('the repository pill shows the bound name and opens a listbox', () => {
   const nodes = renderHeader([[], 'Homer4033/x', '', false], { sessionId: 'session-pill', t: (key) => key })
   const pill = nodes.find((node) => String(node.props.className || '') === 'ct-repo-pill')
   assert.ok(pill, 'the header renders a pill')
@@ -432,8 +440,7 @@ test('the repository pill shows the bound name and keeps the select inside it', 
   assert.equal(textOf(value), 'Homer4033/x')
   const caption = nodes.find((node) => String(node.props.className || '') === 'ct-repo-caption')
   assert.equal(textOf(caption), 'repoSelectLabel')
-  const select = nodes.find((node) => node.type === 'select')
-  assert.ok(select, 'the native select drives the pill')
+  assert.equal(pill.props['aria-haspopup'], 'listbox')
 })
 
 test('an unbound session shows the unbound label inside the pill', () => {

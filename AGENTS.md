@@ -90,3 +90,4 @@
 - 2026-11-19：**包名改为 `dsh-harness-toolbox`**（旧名 `dsh-compression-tiers`，加载器 id 仍为 `compression-tiers`，状态目录与工具名不变；bundle 名即包名，升级须在插件页移除旧条目再添加本目录）。npm 发布改为「`npm stage publish` + 人工 2FA 审批」，旧名的 `0.0.0-stage` 占位弃用。音视频面板在未读到状态时显示「读取中…」而不是误报不支持；版本 1.6.1。
 - 2026-11-19：会话头在线仓库选择器改成标题下方 View 标签行右侧的胶囊（图标 +「仓库」+ 当前 `owner/name` + 箭头，绑定时选中色描边）；官方 header 的 `.titleCluster` 是 `overflow: clip`，所以用 React portal 把外观挂到 `[data-conversation-tabs]` 所在行，原生 `<select>` 铺在胶囊上负责交互，没有标签行时退回内联；版本 1.6.2。
 - 2026-11-19：样式表改为插件加载时全局注入 `style[data-compression-tiers]`（卸载移除），不再依赖设置页渲染 `<style>`；此前未打开设置页时胶囊无样式（SVG 默认 300×150 撑爆标签行）。版本 1.6.3。
+- 2026-11-19：会话头仓库选择器改用自绘深色弹层（portal 到 body、fixed 定位、role=listbox/option、Esc/外部点击/resize 关闭），不再用原生 select（系统白底 + 浅色文字导致选项不可见）；版本 1.6.4。

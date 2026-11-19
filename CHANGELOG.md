@@ -1,6 +1,12 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.3`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.4`。
+
+## 1.6.4 — 2026-11-19
+
+- 会话头仓库选择器不再用原生 `<select>`：原生弹层是系统白底，且会继承胶囊的浅色文字，几乎看不见选项。改成自绘深色弹层（portal 到 `document.body`、`position: fixed` 锚在胶囊下方）：主题底色、圆角、阴影、`max-height` 滚动；每行 30px，左侧勾选位、名称省略、右侧「私有」标记；第一行固定「不绑定（用 git remote）」，已绑定但列表里没有的仓库仍保留。
+- 交互：点胶囊开关弹层；点外部、按 Esc、窗口缩放都会关闭；`aria-haspopup` / `aria-expanded` / `role=listbox` / `role=option` 齐备。
+- 测试改成断言胶囊按钮与弹层选项（含退役仓库、私有标记、禁用态），不再依赖原生 select。
 
 ## 1.6.3 — 2026-11-19
 
