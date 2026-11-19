@@ -1,6 +1,11 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.2`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.3`。
+
+## 1.6.3 — 2026-11-19
+
+- 修复会话头胶囊**没有样式**的问题：样式表以前是作为设置页里的 `<style>` 渲染的，只有打开过设置页才生效，于是首屏的胶囊按 SVG 默认 300×150 撑爆了标签行。现在插件加载时就把 `style[data-compression-tiers]` 注入 `document.head`，卸载时移除；设置页不再自带 `<style>`。
+- 测试：新增断言样式表在 `apply` 阶段注入且包含胶囊规则，设置页树里不再有 `<style>`。
 
 ## 1.6.2 — 2026-11-19
 

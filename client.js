@@ -1372,7 +1372,6 @@ window.__ModuleLoader__.load({
         toolsMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsMessage) : null)
 
       return h('section', { className: 'ct-page' },
-        h('style', { key: 'style' }, CSS),
         h('header', { className: 'ct-head' },
           h('h2', null, t('title')),
           h('p', { className: 'ct-intro' }, t('intro'))),
@@ -1391,9 +1390,34 @@ window.__ModuleLoader__.load({
           : null)
     }
 
+    /**
+     * The stylesheet is global: the session-header pill renders outside the
+     * settings page, so a `<style>` scoped to that page would leave the pill
+     * unstyled (default 300x150 SVG boxes) until the page was opened once.
+     */
+    function installStyles() {
+      if (typeof document === 'undefined' || !document.createElement || !document.head) {
+        return function () {}
+      }
+      const existing = typeof document.querySelector === 'function'
+        ? document.querySelector('style[data-compression-tiers]')
+        : null
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing)
+      const style = document.createElement('style')
+      style.setAttribute('data-compression-tiers', '')
+      style.textContent = CSS
+      document.head.appendChild(style)
+      return function () {
+        if (style.parentNode) style.parentNode.removeChild(style)
+      }
+    }
+
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
+        ctx.effect(function () {
+          return installStyles()
+        }, 'compression-tiers: styles')
         ctx.effect(function () {
           return ctx.locale.register(NS, DICTIONARIES)
         }, 'compression-tiers: locale')

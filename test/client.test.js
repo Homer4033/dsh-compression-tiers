@@ -8,6 +8,7 @@ const source = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 /** Evaluate the browser module without touching a real ModuleLoader. */
 function loadClient() {
   const loaded = []
+  const styles = []
   const sandbox = vm.createContext({
     window: {
       __ModuleLoader__: {
@@ -16,14 +17,26 @@ function loadClient() {
         },
       },
     },
-    document: { createElement: () => ({ dataset: {} }), head: { appendChild() {} } },
+    document: {
+      createElement: () => ({ dataset: {}, setAttribute() {}, textContent: '', parentNode: null }),
+      head: {
+        appendChild(element) {
+          element.parentNode = this
+          styles.push(element)
+        },
+        removeChild(element) {
+          element.parentNode = null
+        },
+      },
+      querySelector: () => null,
+    },
     fetch: () => Promise.resolve({ ok: true, json: async () => ({}) }),
     setTimeout,
     console,
   })
   vm.runInContext(source, sandbox)
   assert.equal(loaded.length, 1)
-  return loaded[0]
+  return { module: loaded[0], styles }
 }
 
 /**
@@ -83,7 +96,7 @@ function sectionContext(registrations, dictionaries) {
 }
 
 function render(states) {
-  const module = loadClient()
+  const { module } = loadClient()
   const registrations = []
   const dictionaries = {}
   module.factory(() => fakeReact(states)).apply(sectionContext(registrations, dictionaries))
@@ -96,7 +109,7 @@ function render(states) {
 
 /** Render the registered session-header action with the given hook values. */
 function renderHeader(states, props) {
-  const module = loadClient()
+  const { module } = loadClient()
   const registrations = []
   module.factory(() => fakeReact(states)).apply(sectionContext(registrations))
   const header = registrations.find((item) => item.options.name === 'conversation.session.header.actions')
@@ -149,7 +162,7 @@ function rulesState(text) {
 }
 
 test('the client factory registers a localized settings section', () => {
-  const module = loadClient()
+  const { module, styles } = loadClient()
   const registrations = []
   let dictionaries
   const ctx = {
@@ -191,6 +204,11 @@ test('the client factory registers a localized settings section', () => {
   assert.equal(header.options.id, 'compression-repo')
   assert.equal(header.options.order, 60)
   assert.equal(header.options.locale, 'compressionTiers')
+  // The sheet is injected once, globally: the header pill renders outside the
+  // settings page and must not depend on that page having been opened.
+  assert.equal(styles.length, 1)
+  assert.match(styles[0].textContent, /\.ct-repo-pill \{/)
+  assert.match(styles[0].textContent, /\.ct-page \{/)
   assert.equal(dictionaries.namespace, 'compressionTiers')
   assert.deepEqual(Object.keys(dictionaries.dicts).sort(), ['en', 'zh'])
   for (const locale of ['zh', 'en']) {
@@ -232,7 +250,7 @@ test('the settings page renders five tier buttons and the global rules editor', 
   const save = buttons.find((node) => String(node.props.className || '').includes('ct-save'))
   assert.ok(save, 'the rules panel has a save button')
   assert.equal(save.props.disabled, true)
-  assert.ok(nodes.some((node) => node.type === 'style'))
+  assert.equal(nodes.some((node) => node.type === 'style'), false, 'the stylesheet is global, not page-scoped')
 })
 
 test('the rules editor shows the saved text and enables saving an edit', () => {

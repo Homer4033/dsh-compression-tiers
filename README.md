@@ -65,7 +65,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 
 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag，变更写在 [CHANGELOG.md](CHANGELOG.md)。
 
-- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.2`
+- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.3`
 - npm：包名 `dsh-harness-toolbox`；`npm publish` 直接发布会要求 OTP，现在改走 `npm stage publish` → 维护者在 CLI 或 npmjs.com 的 **Staged Packages** 里完成 2FA 审批（`npm stage approve <id>`）。旧名 `dsh-compression-tiers` 下只留着一个 `0.0.0-stage` 占位版本，不要使用。
 - GitHub Release 页面按 tag 生成（[releases](https://github.com/Homer4033/dsh-compression-tiers/releases)），更新日志见 [CHANGELOG.md](CHANGELOG.md)
 - CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与 github_push 推送前的检查同源
