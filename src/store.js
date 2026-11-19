@@ -30,7 +30,30 @@ export function defaultSettings() {
     modelRoutes: [],
     lastCompact: null,
     github: defaultGithubSettings(),
+    // Session id → `owner/name` of the online repository that session publishes
+    // to. Bound from the session header; the file is the only place it lives.
+    sessionRepos: {},
   }
+}
+
+/** `owner/name` as GitHub renders it, or null. */
+export function normalizeRepoName(value) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return null
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(text) && text.length <= 200 ? text : null
+}
+
+/** Session bindings: valid entries only, oldest dropped past the cap. */
+export function normalizeSessionRepos(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const entries = []
+  for (const [rawId, rawRepo] of Object.entries(value)) {
+    const id = typeof rawId === 'string' ? rawId.trim() : ''
+    const repo = normalizeRepoName(rawRepo)
+    if (!id || id.length > 200 || !repo) continue
+    entries.push([id, repo])
+  }
+  return Object.fromEntries(entries.slice(-200))
 }
 
 function text(value, fallback) {
@@ -52,6 +75,7 @@ export function normalizeSettings(value) {
     branch: text(github.branch, base.github.branch),
     proxy: text(github.proxy, base.github.proxy),
   }
+  next.sessionRepos = normalizeSessionRepos(next.sessionRepos)
   return next
 }
 

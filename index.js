@@ -4,15 +4,16 @@ import { COMPRESSION_LEVELS, compressionSpec, levelForPolicy, parseLevel } from 
 import { presetCompactionEntries, presetEnginePolicies, syncPresetCompaction } from './src/presets.js'
 import { attachContextMeter, compactionWindowNote, contextReportText, readContextWindow, readMeter } from './src/context-meter.js'
 import { attachCompactQueue, COMPACT_TOOL_NAME, resolveCompaction } from './src/manual-compact.js'
-import { readSettings, writeSettings } from './src/store.js'
+import { readSettings, writeSettings, normalizeRepoName } from './src/store.js'
 import { MAX_RULES_CHARS, readRules, rulesPromptBlock, saveRules } from './src/rules.js'
-import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
-import { networkReport } from './src/publish.js'
+import { beginGithubLogin, cancelGithubLogin, ghAuthStatus, ghStatus, githubLoginStatus, listRepos, prependGhPath, resolveGh, startGhDownload } from './src/gh.js'
+import { networkReport, detectProxy } from './src/publish.js'
+import { ffmpegStatus, prependFfmpegPath, startFfmpegDownload } from './src/ffmpeg.js'
 import { pushFlow, pushReportText, resolvePushCwd } from './src/push-flow.js'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
-import { errorStatus, guard, readBody, sendJson } from './src/http.js'
+import { errorStatus, guard, queryParam, readBody, sendJson } from './src/http.js'
 
 export const name = 'compression-tiers'
 export const inject = ['tools', 'systemPrompt']
@@ -47,6 +48,19 @@ function sessionDirectory(ctx, exec) {
   } catch {
     return ''
   }
+}
+
+/** Durable session id, the key of the online-repository binding. */
+function sessionIdOf(exec) {
+  const session = exec && exec.agent ? exec.agent.session : undefined
+  const header = session && session.header
+  return header && typeof header.id === 'string' ? header.id : ''
+}
+
+/** The repository this session publishes to, or null. */
+function sessionRepoBinding(sessionId, settings = readSettings(homeDir()).settings) {
+  if (!sessionId) return null
+  return settings.sessionRepos[sessionId] || null
 }
 
 function trace(stage, detail) {  // Keep the console quiet: only failures, skipped work and adoption matter.
@@ -205,6 +219,13 @@ export function apply(ctx) {
   } catch (error) {
     trace('gh:path-failed', error instanceof Error ? error.message : String(error))
   }
+  // ffmpeg/ffprobe: the managed copy, when present, also goes first on PATH so
+  // video tooling in this process finds the version this page installed.
+  try {
+    if (prependFfmpegPath(homeDir())) trace('ffmpeg:path-ready', '')
+  } catch (error) {
+    trace('ffmpeg:path-failed', error instanceof Error ? error.message : String(error))
+  }
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'compression-tiers',
@@ -324,7 +345,7 @@ export function apply(ctx) {
   // machine. The flow itself is shared with the settings page.
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'github_push',
-    description: 'Publish the current work over git: probe how GitHub is reachable, scan tracked files for credentials, then push with a 60s deadline and report the failure family plus whatever is still local. Defaults to this session\'s working directory; pass repo to publish a checkout somewhere else. A secret-scan hit blocks the push unless force is true.',
+    description: 'Publish the current work over git: probe how GitHub is reachable, scan tracked files for credentials, then push with a 60s deadline and report the failure family plus whatever is still local. Defaults to this session\'s working directory and, when the session header binds an online repository, pushes there instead of the configured remote; pass repo to publish a checkout somewhere else. A secret-scan hit blocks the push unless force is true.',
     parameters: {
       repo: {
         type: 'string',
@@ -338,6 +359,9 @@ export function apply(ctx) {
     output: toolOutput(),
     async execute(args, exec) {
       const settings = githubSettings()
+      const sessionId = sessionIdOf(exec)
+      const bound = sessionId ? settings.sessionRepos[sessionId] || null : null
+      const target = bound ? `https://github.com/${bound}.git` : ''
       const explicit = typeof args.repo === 'string' ? args.repo.trim() : ''
       const resolved = resolvePushCwd({ explicit, sessionDirectory: sessionDirectory(ctx, exec) })
       if (!resolved.cwd) {
@@ -345,16 +369,17 @@ export function apply(ctx) {
           ok: false,
           failure: resolved.error,
           path: explicit,
+          target: target || null,
           proxy: null,
           secrets: null,
           push: null,
           repo: null,
           forced: false,
         }
-        return { ...failed, source: resolved.source, text: pushReportText(failed, { path: explicit }) }
+        return { ...failed, source: resolved.source, binding: bound, text: pushReportText(failed, { path: explicit }) }
       }
-      const flow = await pushFlow({ cwd: resolved.cwd, settings, force: args.force === true })
-      return { ...flow, source: resolved.source, text: pushReportText(flow, { path: resolved.cwd }) }
+      const flow = await pushFlow({ cwd: resolved.cwd, settings, target, force: args.force === true })
+      return { ...flow, source: resolved.source, binding: bound, text: pushReportText(flow, { path: resolved.cwd }) }
     },
   })), 'compression-tiers: github push tool')
 
@@ -496,6 +521,92 @@ export function apply(ctx) {
         sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
       }
     }, 'github network route')
+
+    // The repositories the signed-in account can push to, for the session
+    // header's online-repository selector.
+    register('/compression-tiers/api/github/online', async (req, res) => {
+      if (guard(child, req, res)) return
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'GET' })
+        return
+      }
+      try {
+        const settings = githubSettings()
+        const detected = await detectProxy({ cwd: PLUGIN_ROOT, override: settings.proxy })
+        const listed = await listRepos(homeDir(), { proxy: detected.proxy })
+        sendJson(res, 200, { ok: listed.ok, repos: listed.repos, error: listed.error, detail: listed.detail })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'github online route')
+
+    // Session header binding: which online repository this session publishes to.
+    register('/compression-tiers/api/github/binding', async (req, res) => {
+      if (guard(child, req, res)) return
+      try {
+        if (req.method === 'GET') {
+          const session = queryParam(req, 'session') || ''
+          if (!session) {
+            sendJson(res, 400, { error: 'session is required' })
+            return
+          }
+          const settings = readSettings(homeDir()).settings
+          sendJson(res, 200, { ok: true, session, repo: sessionRepoBinding(session, settings) })
+          return
+        }
+        if (req.method === 'POST') {
+          const body = await readBody(req)
+          const session = typeof body.session === 'string' ? body.session.trim() : ''
+          if (!session || session.length > 200) {
+            sendJson(res, 400, { error: 'session is required' })
+            return
+          }
+          const requested = typeof body.repo === 'string' ? body.repo.trim() : ''
+          let repo = null
+          if (requested) {
+            repo = normalizeRepoName(requested)
+            if (!repo) {
+              sendJson(res, 400, { error: 'repo must be owner/name' })
+              return
+            }
+          }
+          const state = readSettings(homeDir()).settings
+          const sessionRepos = { ...state.sessionRepos }
+          if (repo) sessionRepos[session] = repo
+          else delete sessionRepos[session]
+          writeSettings(homeDir(), { settings: { ...state, sessionRepos } })
+          sendJson(res, 200, { ok: true, session, repo })
+          return
+        }
+        sendJson(res, 405, { error: 'GET or POST' })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'github binding route')
+
+    // Managed ffmpeg + ffprobe: detection, resumable download, atomic install.
+    register('/compression-tiers/api/ffmpeg', async (req, res) => {
+      if (guard(child, req, res)) return
+      try {
+        if (req.method === 'GET') {
+          sendJson(res, 200, { ok: true, ...(await ffmpegStatus(homeDir())) })
+          return
+        }
+        if (req.method === 'POST') {
+          const body = await readBody(req)
+          const action = typeof body.action === 'string' ? body.action : ''
+          if (action === 'download') {
+            sendJson(res, 202, { ok: true, ...(await startFfmpegDownload(homeDir())) })
+            return
+          }
+          sendJson(res, 400, { error: 'unknown action: download' })
+          return
+        }
+        sendJson(res, 405, { error: 'GET or POST' })
+      } catch (error) {
+        sendJson(res, errorStatus(error), { error: error instanceof Error ? error.message : String(error) })
+      }
+    }, 'ffmpeg route')
 
   })
 

@@ -77,6 +77,7 @@ export function pushReportText(flow, { path = '' } = {}) {
   const where = path || (flow && flow.path) || ''
   if (!flow) return 'push: no result'
   if (flow.ok) {
+    if (flow.target) return `Pushed to ${flow.target} from ${where}${proxyText(flow.proxy)}.`
     const head = flow.repo && flow.repo.localHead ? ` at ${flow.repo.localHead}` : ''
     return `Pushed${head ? ` ${flow.repo.branch || ''}${head}` : ''} from ${where}${proxyText(flow.proxy)}.`
   }
@@ -91,9 +92,10 @@ export function pushReportText(flow, { path = '' } = {}) {
   }
   const push = flow.push || {}
   const timedOut = push.timedOut === true
+  const destination = flow.target ? ` ${flow.target}` : ` ${where}`
   const head = timedOut
-    ? `Push to ${where} timed out after ${Math.round((push.timeoutMs || 60_000) / 1000)}s and the git process tree was killed`
-    : `Push failed (${push.failure || 'unknown'}) from ${where}`
+    ? `Push to${destination} timed out after ${Math.round((push.timeoutMs || 60_000) / 1000)}s and the git process tree was killed`
+    : `Push failed (${push.failure || 'unknown'}) from ${where}${flow.target ? ` to ${flow.target}` : ''}`
   const detail = push.output ? `: ${String(push.output).split(/\r?\n/).filter(Boolean).slice(-3).join(' | ')}` : ''
   const pending = flow.repo && Array.isArray(flow.repo.pending) && flow.repo.pending.length
     ? `. Still local: ${flow.repo.pending.slice(0, 5).join(', ')}`
@@ -108,18 +110,20 @@ export function pushReportText(flow, { path = '' } = {}) {
  * caller that wants to publish anyway is expected to have shown the findings
  * to a human first.
  */
-export async function pushFlow({ cwd, settings = {}, force = false, deps = {} } = {}) {
+export async function pushFlow({ cwd, settings = {}, force = false, target = '', deps = {} } = {}) {
   const detect = deps.detectProxy || detectProxy
   const scan = deps.scanSecrets || scanSecrets
   const pushImpl = deps.pushRepo || pushRepo
   const snapshot = deps.repoSnapshot || repoSnapshot
-  const remote = settings.remote || 'origin'
+  // A session bound to an online repository pushes to that URL instead of the
+  // configured remote name; git accepts either where a remote is expected.
+  const remote = target || settings.remote || 'origin'
   const branch = settings.branch || ''
   if (!cwd) {
-    return { ok: false, failure: 'no-repository', path: '', proxy: null, secrets: null, push: null, repo: null, forced: false }
+    return { ok: false, failure: 'no-repository', path: '', target: target || null, proxy: null, secrets: null, push: null, repo: null, forced: false }
   }
   if (!isRepoDir(cwd)) {
-    return { ok: false, failure: 'repository-path-invalid', path: cwd, proxy: null, secrets: null, push: null, repo: null, forced: false }
+    return { ok: false, failure: 'repository-path-invalid', path: cwd, target: target || null, proxy: null, secrets: null, push: null, repo: null, forced: false }
   }
   const detected = await detect({ cwd, override: settings.proxy || '' })
   const proxy = detected.proxy || null
@@ -129,6 +133,7 @@ export async function pushFlow({ cwd, settings = {}, force = false, deps = {} } 
       ok: false,
       failure: 'secret-scan',
       path: cwd,
+      target: target || null,
       proxy,
       secrets,
       push: { ok: false, failure: 'secret-scan', findings: secrets.findings },
@@ -137,11 +142,13 @@ export async function pushFlow({ cwd, settings = {}, force = false, deps = {} } 
     }
   }
   const pushed = await pushImpl({ cwd, remote, branch, proxy })
-  const repo = await snapshot({ cwd, remote, branch, proxy })
+  // A URL is not a remote name: snapshot only what a named remote can answer.
+  const repo = target ? null : await snapshot({ cwd, remote, branch, proxy })
   return {
     ok: pushed.ok === true,
     failure: pushed.ok === true ? null : (pushed.failure || 'unknown'),
     path: cwd,
+    target: target || null,
     proxy,
     secrets,
     push: pushed,

@@ -15,8 +15,10 @@ import {
   ghRoot,
   ghStatus,
   githubLoginStatus,
+  listRepos,
   parseGhAuthJson,
   parseGhAuthStatus,
+  parseRepoList,
   prependGhPath,
   resolveGh,
   systemGh,
@@ -268,4 +270,39 @@ test('login cannot start without an installed gh and cancel is harmless', () => 
   assert.equal(githubLoginStatus().active, false)
   assert.equal(cancelGithubLogin().canceled, false)
   assert.throws(() => beginGithubLogin(tempHome(), { platform: 'linux', envPath: '' }), /not installed/)
+})
+
+test('parseRepoList keeps owner/name rows and drops anything else', () => {
+  const rows = parseRepoList(JSON.stringify([
+    { nameWithOwner: 'Homer4033/dsh-compression-tiers', isPrivate: false, updatedAt: '2026-11-19T00:00:00Z', pushedAt: '2026-11-19T01:00:00Z' },
+    { nameWithOwner: 'Homer4033/dsh-compression-tiers', isPrivate: true },
+    { nameWithOwner: 'not-a-name' },
+    { nameWithOwner: 'a/b/c' },
+    { nameWithOwner: 'https://github.com/a/b' },
+    { nameWithOwner: '  Homer4033/private-notes  ', isPrivate: true, updatedAt: 42 },
+    { nameWithOwner: '' },
+    null,
+  ]))
+  assert.deepEqual(rows, [
+    {
+      nameWithOwner: 'Homer4033/dsh-compression-tiers',
+      private: false,
+      updatedAt: '2026-11-19T00:00:00Z',
+      pushedAt: '2026-11-19T01:00:00Z',
+    },
+    { nameWithOwner: 'Homer4033/private-notes', private: true, updatedAt: null, pushedAt: null },
+  ])
+  assert.deepEqual(parseRepoList('not json'), [])
+  assert.deepEqual(parseRepoList('{"repos":[]}'), [])
+  assert.deepEqual(parseRepoList(''), [])
+})
+
+test('listRepos reports a missing gh instead of an empty account', async () => {
+  const home = tempHome()
+  try {
+    const listed = await listRepos(home, { platform: 'win32', envPath: '' })
+    assert.deepEqual(listed, { ok: false, error: 'gh-not-installed', repos: [], detail: '' })
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
 })

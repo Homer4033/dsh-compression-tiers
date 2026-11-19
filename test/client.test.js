@@ -93,6 +93,35 @@ function render(states) {
   return { nodes: collect(tree), dictionaries, options: section.options }
 }
 
+/** Render the registered session-header action with the given hook values. */
+function renderHeader(states, props) {
+  const module = loadClient()
+  const registrations = []
+  module.factory(() => fakeReact(states)).apply(sectionContext(registrations))
+  const header = registrations.find((item) => item.options.name === 'conversation.session.header.actions')
+  assert.ok(header, 'the session header action is registered')
+  return collect(header.component(props))
+}
+
+/** The concatenated string children of one element. */
+function textOf(node) {
+  const children = node && Array.isArray(node.props.children) ? node.props.children : []
+  return children.flat(Infinity).filter((child) => typeof child === 'string' || typeof child === 'number').join('')
+}
+
+/** Every string inside an element subtree, in order. */
+function deepText(node) {
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (!node || typeof node !== 'object') return ''
+  const children = node.props && Array.isArray(node.props.children) ? node.props.children : []
+  return children.map(deepText).join('')
+}
+
+function optionsOf(select) {
+  const children = Array.isArray(select.props.children) ? select.props.children : []
+  return children.flat(Infinity).filter((node) => node && node.type === 'option')
+}
+
 const settingsState = {
   level: 'standard',
   levels: ['gentle', 'light', 'standard', 'aggressive', 'max'].map((id) => ({
@@ -150,10 +179,17 @@ test('the client factory registers a localized settings section', () => {
   }
   module.factory(() => fakeReact(null)).apply(ctx)
 
-  assert.deepEqual(registrations.map((item) => item.options.name).sort(), ['settings.section'])
+  assert.deepEqual(
+    registrations.map((item) => item.options.name).sort(),
+    ['conversation.session.header.actions', 'settings.section'],
+  )
   const section = registrations.find((item) => item.options.name === 'settings.section')
   assert.equal(section.options.id, 'compression-tiers')
   assert.equal(section.options.label(), 'compressionTiers:sectionLabel')
+  const header = registrations.find((item) => item.options.name === 'conversation.session.header.actions')
+  assert.equal(header.options.id, 'compression-repo')
+  assert.equal(header.options.order, 60)
+  assert.equal(header.options.locale, 'compressionTiers')
   assert.equal(dictionaries.namespace, 'compressionTiers')
   assert.deepEqual(Object.keys(dictionaries.dicts).sort(), ['en', 'zh'])
   for (const locale of ['zh', 'en']) {
@@ -168,6 +204,12 @@ test('the client factory registers a localized settings section', () => {
     assert.ok(keys.includes('ghDownload'))
     assert.ok(keys.includes('ghLogin'))
     assert.ok(keys.includes('ghToolNote'))
+    assert.ok(keys.includes('toolsTitle'))
+    assert.ok(keys.includes('toolsDownloading'))
+    assert.ok(keys.includes('toolsUnsupported'))
+    assert.ok(keys.includes('repoSelectLabel'))
+    assert.ok(keys.includes('repoNone'))
+    assert.ok(keys.includes('repoTitle'))
     // The sidebar repository panel is gone; its copy must not linger.
     assert.equal(keys.filter((key) => key.startsWith('repos')).length, 0)
   }
@@ -258,4 +300,97 @@ test('the GitHub CLI panel shows the installed binary and the signed-in account'
     .find((node) => String(node.props.className || '').includes('ct-save') && String(node.props.children).includes('ghInstalled'))
   assert.ok(install)
   assert.equal(install.props.disabled, true)
+})
+
+test('the session header selects one online repository for the session', () => {
+  const repos = [
+    { nameWithOwner: 'Homer4033/dsh-compression-tiers', private: false },
+    { nameWithOwner: 'Homer4033/private-notes', private: true },
+  ]
+  const nodes = renderHeader([repos, 'Homer4033/dsh-compression-tiers', '', false], {
+    sessionId: 'session-a',
+    t: (key) => key,
+  })
+  const select = nodes.find((node) => node.type === 'select')
+  assert.ok(select, 'the header renders a repository select')
+  assert.equal(select.props.value, 'Homer4033/dsh-compression-tiers')
+  assert.equal(select.props['aria-label'], 'repoSelectAria')
+  assert.equal(select.props.disabled, false)
+  const options = optionsOf(select)
+  assert.deepEqual(options.map((option) => option.props.value), [
+    '',
+    'Homer4033/dsh-compression-tiers',
+    'Homer4033/private-notes',
+  ])
+  assert.equal(textOf(options[0]), 'repoNone')
+  assert.equal(textOf(options[2]), 'Homer4033/private-notes · repoPrivate')
+})
+
+test('a binding the account no longer lists stays selectable; no session disables the select', () => {
+  const nodes = renderHeader([[], 'Homer4033/retired', '', false], { sessionId: 'session-b', t: (key) => key })
+  const select = nodes.find((node) => node.type === 'select')
+  assert.equal(select.props.value, 'Homer4033/retired')
+  assert.deepEqual(optionsOf(select).map((option) => option.props.value), ['', 'Homer4033/retired'])
+
+  const withoutSession = renderHeader([[], '', '', false], { t: (key) => key })
+  assert.equal(withoutSession.find((node) => node.type === 'select').props.disabled, true)
+})
+
+test('the header explains an unreadable repository list', () => {
+  const nodes = renderHeader([[], '', 'repoUnavailable', false], { sessionId: 'session-c', t: (key) => key })
+  const note = nodes.find((node) => String(node.props.className || '') === 'ct-repo-note')
+  assert.ok(note, 'the header renders a status note')
+  assert.equal(note.props.role, 'status')
+  assert.equal(textOf(note), 'repoUnavailable')
+})
+
+test('the video-tool panel reports both binaries and disables the install button', () => {
+  const tools = {
+    supported: true,
+    platform: 'win32',
+    arch: 'x64',
+    state: 'installed',
+    version: '7.1.1',
+    ffmpeg: { path: 'C:/dsh/compression-tiers/ffmpeg/bin/ffmpeg.exe', managed: true, version: '7.1.1' },
+    ffprobe: { path: 'C:/dsh/compression-tiers/ffmpeg/bin/ffprobe.exe', managed: true, version: '7.1.1' },
+    download: { running: false, received: 0, total: null, percent: null, error: null },
+  }
+  const { nodes } = render([settingsState, '', false, null, '', '', false, null, null, '', false, null, tools, '', false])
+  const rows = nodes.filter((node) => String(node.props.className || '') === 'ct-tool')
+  assert.equal(rows.length, 2)
+  const names = nodes
+    .filter((node) => String(node.props.className || '') === 'ct-tool-name')
+    .map((node) => textOf(node))
+  assert.deepEqual(names, ['ffmpeg', 'ffprobe'])
+  assert.match(deepText(rows[0]), /toolsManaged v7\.1\.1/)
+  assert.match(deepText(rows[0]), /ffmpeg\.exe/)
+  assert.match(deepText(rows[1]), /ffprobe\.exe/)
+  const install = nodes
+    .filter((node) => node.type === 'button')
+    .find((node) => String(node.props.className || '').includes('ct-save') && textOf(node) === 'toolsInstalled')
+  assert.ok(install, 'the panel has an install button')
+  assert.equal(install.props.disabled, true)
+})
+
+test('a running video-tool download shows its progress and blocks a second start', () => {
+  const tools = {
+    supported: true,
+    platform: 'win32',
+    arch: 'x64',
+    state: 'missing',
+    version: null,
+    ffmpeg: null,
+    ffprobe: null,
+    download: { running: true, received: 55000000, total: 114768076, percent: 47.9, error: null },
+  }
+  const { nodes } = render([settingsState, '', false, null, '', '', false, null, null, '', false, null, tools, '', false])
+  const button = nodes
+    .filter((node) => node.type === 'button')
+    .find((node) => textOf(node).startsWith('toolsDownloading') && textOf(node).includes('47.9%'))
+  assert.ok(button, 'the button reports the running download')
+  assert.equal(button.props.disabled, true)
+  const bar = nodes.find((node) => String(node.props.className || '') === 'ct-progress')
+  assert.ok(bar, 'the panel renders a progress bar')
+  const fill = Array.isArray(bar.props.children) ? bar.props.children[0] : bar.props.children
+  assert.equal(fill.props.style.width, '47.9%')
 })

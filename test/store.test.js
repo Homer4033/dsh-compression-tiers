@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readSettings, settingsPaths, writeJson, writeSettings, writeText } from '../src/store.js'
+import { normalizeRepoName, normalizeSessionRepos, readSettings, settingsPaths, writeJson, writeSettings, writeText } from '../src/store.js'
 
 function tempHome() {
   return mkdtempSync(join(tmpdir(), 'compression-tiers-'))
@@ -113,4 +113,51 @@ test('writeJson is a thin atomic text write', () => {
   } finally {
     rmSync(home, { recursive: true, force: true })
   }
+})
+
+test('session repository bindings are normalized and invalid entries dropped', () => {
+  const home = tempHome()
+  try {
+    const saved = writeSettings(home, {
+      settings: {
+        sessionRepos: {
+          'session-a': 'Homer4033/dsh-compression-tiers',
+          ' session-b ': 'Homer4033/ok',
+          'session-c': 'not a repo',
+          'session-d': 'too/many/slashes',
+          '': 'Homer4033/x',
+          'session-e': 42,
+        },
+      },
+    })
+    assert.deepEqual(saved.settings.sessionRepos, {
+      'session-a': 'Homer4033/dsh-compression-tiers',
+      'session-b': 'Homer4033/ok',
+    })
+    assert.equal(readSettings(home).settings.sessionRepos['session-a'], 'Homer4033/dsh-compression-tiers')
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('normalizeRepoName accepts owner/name only', () => {
+  assert.equal(normalizeRepoName('Homer4033/dsh-compression-tiers'), 'Homer4033/dsh-compression-tiers')
+  assert.equal(normalizeRepoName('  Homer4033/ok  '), 'Homer4033/ok')
+  assert.equal(normalizeRepoName('Homer4033'), null)
+  assert.equal(normalizeRepoName('https://github.com/a/b'), null)
+  assert.equal(normalizeRepoName('a/b/c'), null)
+  assert.equal(normalizeRepoName(''), null)
+  assert.equal(normalizeRepoName(null), null)
+  assert.equal(normalizeRepoName(`${'x'.repeat(100)}/${'y'.repeat(100)}`), null)
+})
+
+test('session repository bindings keep the last 200 entries', () => {
+  const input = {}
+  for (let index = 0; index < 205; index += 1) input[`session-${index}`] = `owner/repo-${index}`
+  const kept = normalizeSessionRepos(input)
+  assert.equal(Object.keys(kept).length, 200)
+  assert.equal('session-0' in kept, false)
+  assert.equal(kept['session-204'], 'owner/repo-204')
+  assert.deepEqual(normalizeSessionRepos(null), {})
+  assert.deepEqual(normalizeSessionRepos(['owner/repo']), {})
 })

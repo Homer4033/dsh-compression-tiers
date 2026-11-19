@@ -1,6 +1,15 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.5.1`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.0`。
+
+## 1.6.0 — 2026-11-19
+
+- **兼容新运行时**：`engines.dsh` 从钉死的 `0.2.2-rc.3` 放宽为 `>=0.2.2-rc.3 <0.3.0`，`0.2.2-rc.5` 不再报「不兼容」；用 Node 自带 semver 验证过 rc.3 / rc.5 满足、0.3.0 拒绝。
+- **会话发布仓库**：会话标题右侧新增「仓库」选择器，按持久会话 id 把当前会话绑到某个在线仓库（`settings.json` 的 `sessionRepos`，最多 200 条）。绑定后 `github_push` 默认推到 `https://github.com/<owner/name>.git`——只换推送目标，不克隆、不切分支、不改工作区。列表来自 `GET /api/github/online`（`gh repo list --limit 100`，客户端缓存 5 分钟，未安装/未登录/网络不通分别说明），绑定接口是 `GET/POST /api/github/binding?session=…`。
+- **音视频工具管理**：设置页新增「音视频工具」面板，检测 `ffmpeg` / `ffprobe`（托管版优先、再看 PATH），显示两者版本与路径；可从 gyan.dev 下载 Windows essentials 构建（约 110 MB，HTTP Range 断点续传、20 分钟超时），解压后先跑 `-version` 自检暂存副本再原子替换 `bin` 目录、失败回滚，最后插到本进程 PATH 最前。接口 `GET/POST /api/ffmpeg`。
+- 新模块 `src/ffmpeg.js`；`src/gh.js` 增加 `listRepos` / `parseRepoList` 并把 `runCommand` / `extractArchive` 导出复用；`src/http.js` 增加 `queryParam`；`src/store.js` 增加 `sessionRepos` 归一化（`normalizeRepoName` / `normalizeSessionRepos`）；`src/push-flow.js` 的 `pushFlow` 新增 `target`（URL 作为远端时不取仓库快照）。
+- 客户端：新增会话头 `conversation.session.header.actions` 注册（id `compression-repo`，order 60）与设置页音视频面板、对应 zh/en 文案与样式。
+- 测试：新增 `test/ffmpeg.test.js`、`test/http.test.js`，并补 `parseRepoList` / `listRepos`、`sessionRepos` 归一化、`pushFlow` 的 `target` 与报告文案、设置页音视频面板与会话头选择器；共 113 条。
 
 ## 1.5.1 — 2026-11-19
 

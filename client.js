@@ -10,12 +10,15 @@ window.__ModuleLoader__.load({
     const GH_API = '/compression-tiers/api/github'
     const GH_AUTH_API = '/compression-tiers/api/github/auth'
     const GH_NETWORK_API = '/compression-tiers/api/github/network'
+    const GH_ONLINE_API = '/compression-tiers/api/github/online'
+    const GH_BINDING_API = '/compression-tiers/api/github/binding'
+    const FFMPEG_API = '/compression-tiers/api/ffmpeg'
 
     const DICTIONARIES = {
       zh: {
         sectionLabel: '上下文压缩',
         title: '上下文压缩',
-        intro: '五档自动压缩，切换即同步到所有预设引擎；下方还有全局规则与 GitHub CLI。',
+        intro: '五档自动压缩，切换即同步到所有预设引擎；下方还有全局规则、GitHub CLI 与音视频工具。',
         levelsAria: '压缩档位',
         levelGentle: '极轻',
         levelLight: '轻量',
@@ -96,11 +99,35 @@ window.__ModuleLoader__.load({
         ghDnsOff: 'DNS 不是 GitHub 地址',
         ghScopeMissing: '令牌缺少 repo scope，私有仓库推送会失败。',
         ghToolNote: '发布交给 github_push 工具：默认推本会话的工作目录，先体检网络、扫密钥，再带超时推送。这一栏只管 gh 本身与网络体检。',
+        toolsTitle: '音视频工具',
+        toolsIntro: 'ffmpeg 与 ffprobe：可下载托管版（约 110 MB，断点续传），也可直接用系统 PATH 里的版本；托管版优先。',
+        toolsNotFound: '未找到',
+        toolsManaged: '托管版',
+        toolsSystem: '系统 PATH',
+        toolsInstalled: '已安装',
+        toolsInstall: '下载安装',
+        toolsContinue: '继续下载',
+        toolsRetry: '重试',
+        toolsProbe: '重新检测',
+        toolsDownloading: '下载中 ',
+        toolsUnsupported: '当前系统没有托管版',
+        toolsLoadFailed: '读取音视频工具状态失败：',
+        toolsActionFailed: '操作失败：',
+        repoSelectLabel: '仓库',
+        repoSelectAria: '在线仓库（github_push 的推送目标）',
+        repoTitle: 'github_push 默认推送到这个在线仓库',
+        repoNone: '不绑定（用 git remote）',
+        repoLoading: '读取仓库列表…',
+        repoPrivate: '私有',
+        repoUnavailable: 'gh 未安装或未登录',
+        repoNetwork: '网络不通，读不到仓库',
+        repoFailed: '读取仓库失败',
+        repoSaveFailed: '保存失败：',
       },
       en: {
         sectionLabel: 'Context compression',
         title: 'Context compression',
-        intro: 'Five automatic tiers: switching syncs every preset engine. Global rules and GitHub CLI are below.',
+        intro: 'Five automatic tiers: switching syncs every preset engine. Global rules, GitHub CLI and video tools are below.',
         levelsAria: 'Compression tier',
         levelGentle: 'Gentle',
         levelLight: 'Light',
@@ -181,6 +208,30 @@ window.__ModuleLoader__.load({
         ghDnsOff: 'DNS is not a GitHub address',
         ghScopeMissing: 'The token has no repo scope; pushing a private repository will fail.',
         ghToolNote: 'Publishing belongs to the github_push tool: it pushes the session working directory after a network probe and a secret scan. This panel only manages gh and checks the network.',
+        toolsTitle: 'Video tools',
+        toolsIntro: 'ffmpeg and ffprobe: download the managed build (about 110 MB, resumes after an interruption) or use the copies on PATH; the managed build wins.',
+        toolsNotFound: 'not found',
+        toolsManaged: 'managed',
+        toolsSystem: 'system PATH',
+        toolsInstalled: 'Installed',
+        toolsInstall: 'Download and install',
+        toolsContinue: 'Resume download',
+        toolsRetry: 'Retry',
+        toolsProbe: 'Re-check',
+        toolsDownloading: 'Downloading ',
+        toolsUnsupported: 'No managed build for this system',
+        toolsLoadFailed: 'Could not read the video-tool state: ',
+        toolsActionFailed: 'Action failed: ',
+        repoSelectLabel: 'Repo',
+        repoSelectAria: 'Online repository (the github_push target)',
+        repoTitle: 'github_push publishes to this online repository by default',
+        repoNone: 'Not bound (use the git remote)',
+        repoLoading: 'Loading repositories…',
+        repoPrivate: 'private',
+        repoUnavailable: 'gh is missing or signed out',
+        repoNetwork: 'Network blocked the list',
+        repoFailed: 'Could not list repositories',
+        repoSaveFailed: 'Could not save: ',
       },
     }
 
@@ -406,6 +457,68 @@ window.__ModuleLoader__.load({
   height: 100%;
   background: var(--dsw-alias-state-business-primary);
 }
+.ct-tools-list {
+  display: grid;
+  gap: 4px;
+}
+.ct-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.ct-tool-name {
+  color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.ct-tool-path {
+  color: var(--dsw-alias-label-tertiary);
+  word-break: break-all;
+}
+.ct-binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.ct-binding-label {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+.ct-select {
+  box-sizing: border-box;
+  max-width: 200px;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.ct-select:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+.ct-repo-note {
+  max-width: 200px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
 `
 
     function percent(value) {
@@ -437,6 +550,132 @@ window.__ModuleLoader__.load({
       })
     }
 
+    function messageOf(error) {
+      return error && error.message ? error.message : String(error)
+    }
+
+    /**
+     * The account's repositories, cached for five minutes. The session header
+     * remounts on every session switch, and listing repositories is a `gh`
+     * round trip; a cache keeps switching sessions free.
+     */
+    const REPO_CACHE_MS = 5 * 60_000
+    const repoCache = { repos: null, error: null, at: 0, pending: null }
+
+    function loadOnlineRepos() {
+      if (repoCache.repos && Date.now() - repoCache.at < REPO_CACHE_MS) {
+        return Promise.resolve({ repos: repoCache.repos, error: repoCache.error })
+      }
+      if (repoCache.pending) return repoCache.pending
+      repoCache.pending = fetch(GH_ONLINE_API, { credentials: 'same-origin' })
+        .then(readJson)
+        .then(function (body) {
+          const repos = body && Array.isArray(body.repos) ? body.repos : []
+          repoCache.repos = repos
+          repoCache.error = body && body.error ? String(body.error) : null
+          repoCache.at = Date.now()
+          return { repos, error: repoCache.error }
+        })
+        .catch(function (error) {
+          // Keep the rows a previous listing returned; only the note says it failed.
+          repoCache.repos = repoCache.repos || []
+          repoCache.error = 'failed'
+          repoCache.at = Date.now()
+          return { repos: repoCache.repos, error: 'failed', detail: messageOf(error) }
+        })
+        .then(function (result) {
+          repoCache.pending = null
+          return result
+        })
+      return repoCache.pending
+    }
+
+    function repoErrorText(t, error) {
+      if (error === 'gh-not-installed' || error === 'not-authenticated') return t('repoUnavailable')
+      if (error === 'network') return t('repoNetwork')
+      return t('repoFailed')
+    }
+
+    /** Session-header selector: which online repository this session publishes to. */
+    function RepoBinding(props) {
+      const t = props.t
+      const sessionId = props.sessionId
+      const [repos, setRepos] = React.useState(repoCache.repos)
+      // The first load has to say something while the list is on its way.
+      const [bound, setBound] = React.useState('')
+      const [note, setNote] = React.useState(repoCache.repos ? '' : t('repoLoading'))
+      const [busy, setBusy] = React.useState(false)
+      const mounted = React.useRef(true)
+
+      React.useEffect(function () {
+        mounted.current = true
+        if (sessionId) {
+          fetch(GH_BINDING_API + '?session=' + encodeURIComponent(sessionId), { credentials: 'same-origin' })
+            .then(readJson)
+            .then(function (body) {
+              if (mounted.current) setBound(body && typeof body.repo === 'string' ? body.repo : '')
+            })
+            .catch(function (error) {
+              if (mounted.current) setNote(t('repoSaveFailed') + messageOf(error))
+            })
+        }
+        loadOnlineRepos().then(function (result) {
+          if (!mounted.current) return
+          setRepos(result.repos)
+          setNote(result.error ? repoErrorText(t, result.error) : '')
+        })
+        return function () {
+          mounted.current = false
+        }
+      }, [sessionId])
+
+      function selectRepo(event) {
+        const value = event && event.target ? event.target.value : ''
+        if (!sessionId) return
+        setBusy(true)
+        setNote('')
+        fetch(GH_BINDING_API, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session: sessionId, repo: value }),
+        })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            setBound(body && typeof body.repo === 'string' ? body.repo : '')
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setNote(t('repoSaveFailed') + messageOf(error))
+          })
+          .then(function () {
+            if (mounted.current) setBusy(false)
+          })
+      }
+
+      const rows = Array.isArray(repos) ? repos : []
+      const options = [h('option', { key: '__none', value: '' }, t('repoNone'))]
+      const known = new Set(rows.map(function (row) { return row.nameWithOwner }))
+      // A bound repository the listing no longer returns must still be selectable.
+      if (bound && !known.has(bound)) options.push(h('option', { key: '__bound', value: bound }, bound))
+      rows.forEach(function (row) {
+        options.push(h('option', { key: row.nameWithOwner, value: row.nameWithOwner },
+          row.nameWithOwner + (row.private ? ' · ' + t('repoPrivate') : '')))
+      })
+
+      return h('label', { className: 'ct-binding', title: t('repoTitle') },
+        h('span', { className: 'ct-binding-label' }, t('repoSelectLabel')),
+        h('select', {
+          className: 'ct-select',
+          value: bound,
+          disabled: busy || !sessionId,
+          'aria-label': t('repoSelectAria'),
+          onChange: selectRepo,
+        }, options),
+        note ? h('span', { className: 'ct-repo-note', role: 'status', title: note }, note) : null)
+    }
+
     function Page(props) {
       const t = props.t
       const [state, setState] = React.useState(null)
@@ -451,6 +690,9 @@ window.__ModuleLoader__.load({
       const [ghMessage, setGhMessage] = React.useState('')
       const [ghBusy, setGhBusy] = React.useState(false)
       const [network, setNetwork] = React.useState(null)
+      const [tools, setTools] = React.useState(null)
+      const [toolsMessage, setToolsMessage] = React.useState('')
+      const [toolsBusy, setToolsBusy] = React.useState(false)
       const mounted = React.useRef(true)
       const buttons = React.useRef({})
 
@@ -461,6 +703,7 @@ window.__ModuleLoader__.load({
         loadGithub()
         loadAuth()
         loadNetwork()
+        loadTools()
         return function () {
           mounted.current = false
         }
@@ -478,6 +721,13 @@ window.__ModuleLoader__.load({
         const timer = window.setInterval(function () { loadGithub() }, 1500)
         return function () { window.clearInterval(timer) }
       }, [loggingIn])
+
+      const toolsRunning = tools && tools.download ? tools.download.running === true : false
+      React.useEffect(function () {
+        if (!toolsRunning) return undefined
+        const timer = window.setInterval(function () { loadTools() }, 1200)
+        return function () { window.clearInterval(timer) }
+      }, [toolsRunning])
 
       function load() {
         fetch(API, { credentials: 'same-origin' })
@@ -643,6 +893,44 @@ window.__ModuleLoader__.load({
           .catch(function () {
             if (!mounted.current) return
             setNetwork(null)
+          })
+      }
+
+      function loadTools() {
+        return fetch(FFMPEG_API, { credentials: 'same-origin' })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            setTools(body)
+            setToolsMessage('')
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setToolsMessage(t('toolsLoadFailed') + messageOf(error))
+          })
+      }
+
+      function downloadTools() {
+        if (toolsBusy) return
+        setToolsBusy(true)
+        setToolsMessage('')
+        fetch(FFMPEG_API, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'download' }),
+        })
+          .then(readJson)
+          .then(function (body) {
+            if (!mounted.current) return
+            setTools(body)
+          })
+          .catch(function (error) {
+            if (!mounted.current) return
+            setToolsMessage(t('toolsActionFailed') + messageOf(error))
+          })
+          .then(function () {
+            if (mounted.current) setToolsBusy(false)
           })
       }
 
@@ -902,6 +1190,57 @@ window.__ModuleLoader__.load({
         networkBlock,
         ghMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, ghMessage) : null)
 
+      const toolsItem = tools
+      const toolsDownload = toolsItem && toolsItem.download ? toolsItem.download : null
+      const toolsSupported = toolsItem ? toolsItem.supported !== false : false
+      const toolsRunningNow = toolsDownload ? toolsDownload.running === true : false
+      const toolsInstalled = toolsItem ? toolsItem.state === 'installed' : false
+      const toolsButton = !toolsItem || !toolsSupported
+        ? t('toolsUnsupported')
+        : toolsRunningNow
+          ? t('toolsDownloading') + (toolsDownload.percent == null ? '' : toolsDownload.percent + '%')
+          : toolsInstalled
+            ? t('toolsInstalled')
+            : toolsDownload && toolsDownload.error
+              ? t('toolsRetry')
+              : toolsItem.state === 'missing' ? t('toolsInstall') : t('toolsContinue')
+      const toolRow = function (name, info) {
+        const version = info && info.version ? ' v' + info.version : ''
+        const origin = !info
+          ? t('toolsNotFound')
+          : (info.managed ? t('toolsManaged') : t('toolsSystem')) + version
+        return h('div', { className: 'ct-tool', key: name },
+          h('span', { className: 'ct-tool-name' }, name),
+          h('span', { className: 'ct-note' }, origin),
+          info && info.path ? h('span', { className: 'ct-tool-path' }, info.path) : null)
+      }
+      const toolsPanel = h('section', { className: 'ct-panel' },
+        h('div', { className: 'ct-rules-head' },
+          h('h3', null, t('toolsTitle')),
+          h('p', { className: 'ct-note' }, t('toolsIntro'))),
+        h('div', { className: 'ct-tools-list' },
+          toolRow('ffmpeg', toolsItem ? toolsItem.ffmpeg : null),
+          toolRow('ffprobe', toolsItem ? toolsItem.ffprobe : null)),
+        h('div', { className: 'ct-row' },
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            disabled: toolsBusy || !toolsItem || !toolsSupported || toolsRunningNow || toolsInstalled,
+            onClick: downloadTools,
+          }, toolsButton),
+          h('button', {
+            type: 'button',
+            className: 'ct-save',
+            onClick: function () { loadTools() },
+          }, t('toolsProbe'))),
+        toolsRunningNow || (toolsDownload && toolsDownload.error && toolsDownload.percent != null)
+          ? h('div', { className: 'ct-progress' }, h('span', { style: { width: (toolsDownload.percent || 0) + '%' } }))
+          : null,
+        toolsDownload && toolsDownload.error
+          ? h('p', { className: 'ct-status', role: 'alert' }, toolsDownload.error)
+          : null,
+        toolsMessage ? h('p', { className: 'ct-status', role: 'status', 'aria-live': 'polite' }, toolsMessage) : null)
+
       return h('section', { className: 'ct-page' },
         h('style', { key: 'style' }, CSS),
         h('header', { className: 'ct-head' },
@@ -910,6 +1249,7 @@ window.__ModuleLoader__.load({
         panel,
         rulesPanel,
         ghPanel,
+        toolsPanel,
         state
           ? h('div', { className: 'ct-meta' },
             h('span', null, t('engines') + t('sep') + engineCount),
@@ -938,6 +1278,17 @@ window.__ModuleLoader__.load({
             order: 47,
             label: function () { return t('sectionLabel') },
           }, SettingsPage)
+        })
+        // Session header: which online repository this session publishes to.
+        // Title-adjacent actions is the official slot for this; the preset label
+        // sits at -10, so anything positive lands after it.
+        ctx.slots.inject('conversation.session.header.actions', function () {
+          return ctx.slots.register({
+            name: 'conversation.session.header.actions',
+            id: 'compression-repo',
+            order: 60,
+            locale: NS,
+          }, RepoBinding)
         })
       },
     }

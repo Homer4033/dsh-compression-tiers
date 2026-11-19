@@ -191,3 +191,31 @@ test('the report names the block, the timeout and the plain success', () => {
   assert.match(timeout, /timed out/)
   assert.match(timeout, /127\.0\.0\.1:18081/)
 })
+
+test('a session binding turns the push target into a repository URL', async () => {
+  const root = tempDir()
+  try {
+    const cwd = repo(join(root, 'repo'))
+    const target = 'https://github.com/Homer4033/wechat-article-translator.git'
+    const fake = deps()
+    const flow = await pushFlow({ cwd, settings: { remote: 'origin' }, target, deps: fake })
+    assert.equal(flow.ok, true)
+    assert.equal(flow.target, target)
+    assert.deepEqual(fake.calls.push[0], { cwd, remote: target, branch: '', proxy: flow.proxy })
+    // A URL is not a remote name: there is nothing to snapshot.
+    assert.equal(fake.calls.snapshot.length, 0)
+    assert.equal(flow.repo, null)
+    assert.match(pushReportText(flow, { path: cwd }), /^Pushed to https:\/\/github\.com\/Homer4033\/wechat-article-translator\.git from/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a bound target is reported even when the push is refused', async () => {
+  const target = 'https://github.com/Homer4033/wechat-article-translator.git'
+  const fake = deps()
+  const refused = await pushFlow({ cwd: '', settings: {}, target, deps: fake })
+  assert.equal(refused.failure, 'no-repository')
+  assert.equal(refused.target, target)
+  assert.equal(fake.calls.detect.length, 0)
+})

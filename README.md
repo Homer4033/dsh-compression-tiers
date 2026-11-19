@@ -13,6 +13,7 @@
 - [使用](#使用)
 - [全局规则](#全局规则)
 - [GitHub CLI](#github-cli)
+- [音视频工具](#音视频工具)
 - [五档参数](#五档参数)
 - [智能体工具](#智能体工具)
 - [工作原理](#工作原理)
@@ -23,7 +24,7 @@
 
 ## 这是什么
 
-官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐六件事：
+官方 `@deepseek-ai/dsh-compaction-basic` 只暴露 `thresholdRatio` / `retainRatio` / `headroomTokens` 等字段，普通用户没有合适的地方改，也不清楚改完有效范围是多少。本插件把这组参数收成五档，并补齐八件事：
 
 1. **设置页**：`设置 → 上下文压缩`，五个按钮直接切档，显示自动触发比例与逐字保留比例。
 2. **引擎同步**：选中的档位立即写入每个已挂载的 Agent 预设压缩引擎（官方组合里真正运行的引擎在预设隔离域，家庭补丁碰不到）。
@@ -31,12 +32,14 @@
 4. **全局规则**：同一页下半部分直接编辑官方指令文件 `<DSH home>/AGENTS.md`，保存即原子写入，不另存副本。
 5. **GitHub CLI**：同一页管理 `gh`——识别系统 PATH、下载固定版本的托管副本、走设备码登录，供官方变更请求面板使用。
 6. **发布闭环**：`github_push` 工具让智能体把当前工作区发出去：先体检网络、扫密钥，再带超时推送并报出仍在本地的东西。
+7. **会话发布仓库**：会话标题旁选择在线仓库，选中的仓库成为该会话 `github_push` 的默认推送目标；只改目标 URL，不克隆、不改工作区。
+8. **音视频工具**：同一页检测 `ffmpeg` / `ffprobe`，可从 gyan.dev 下载托管版（断点续传、自检后原子替换），托管版优先并插到本进程 PATH 最前。
 
 本包从 `homerdsh-workbench` 的压缩子系统拆出，状态独立、工具名独立，可单独安装；全局规则与 GitHub CLI 面板也由工作台合并而来。
 
 ## 安装
 
-要求：DeepSeek Harness `0.2.2-rc.3`，Node.js ≥ 24.9。
+要求：DeepSeek Harness 运行时兼容 `0.2.2-rc.3` 到 `0.3.0` 之前的版本（`engines.dsh` 为 `>=0.2.2-rc.3 <0.3.0`，包含 `0.2.2-rc.5`），Node.js ≥ 24.9。
 
 **本地目录安装（推荐）**
 
@@ -54,7 +57,7 @@
 
 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag，变更写在 [CHANGELOG.md](CHANGELOG.md)。
 
-- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.5.0`
+- 锁定版本安装：`git+https://github.com/Homer4033/dsh-compression-tiers.git#v1.6.0`
 - GitHub Release 页面按 tag 生成（[releases](https://github.com/Homer4033/dsh-compression-tiers/releases)），更新日志见 [CHANGELOG.md](CHANGELOG.md)
 - CI（`.github/workflows/ci.yml`）在 Windows 与 Linux 上跑 `npm test`，随后跑 `node scripts/check-secrets.mjs`；后者与 github_push 推送前的检查同源
 - 本地自查：`npm run check:secrets`
@@ -116,7 +119,27 @@
 - **结果**：返回 `ok` / `failure` / `path` / `proxy` / `push` / `repo` / `secrets`，并附一段可直接引用的人类可读 `text`。
 - **设置页**：GitHub 区只保留 gh 的安装/登录与网络体检——没有仓库路径、没有推送按钮。发布是工具的事，人工要推就自己跑 git。
 
+### 会话发布仓库
+
+`github_push` 默认推设置里的 `github.remote`（初始 `origin`）。会话标题右侧的「仓库」选择器把默认目标换成某个在线仓库：
+
+- **列表**：`GET /compression-tiers/api/github/online` 用 `gh repo list --limit 100` 列出账号仓库（含私有标记），客户端缓存 5 分钟；`gh` 未安装、未登录、网络不通分别给出说明，不会伪装成空账号。
+- **绑定**：选择即写 `settings.json` 的 `sessionRepos[sessionId]`（`owner/name`，最多保留 200 条），接口是 `GET/POST /compression-tiers/api/github/binding?session=…`。
+- **效果**：绑定后 `github_push` 的 `target` 是 `https://github.com/<owner/name>.git`，直接作为 `git push` 的远端；只改推送目标，不克隆、不切分支、不改工作区。选「不绑定（用 git remote）」即清掉该会话的绑定。
+- **边界**：绑定按 DSH 的持久会话 id 存；列表读不到时，已绑定的仓库仍保留在选项里，可以手动取消。
+
 > 下载只校验大小与 `gh --version`，没有对压缩包固定 SHA-256；钉住的是官方 release URL。
+
+## 音视频工具
+
+设置页最下方管理 `ffmpeg` 与 `ffprobe`（视频剪辑、转码、读时长与编码）：
+
+- **检测**：先看托管版 `<DSH home>/compression-tiers/ffmpeg/bin`，再看系统 PATH；两处都有时优先托管版，并在插件激活时把该目录插到宿主进程 PATH 最前。面板显示每个工具的版本与路径，来源标为「托管版」或「系统 PATH」。
+- **下载**：Windows 用 gyan.dev 的 `ffmpeg-release-essentials.zip`（约 110 MB，浮动的 release 构建）；HTTP Range 断点续传、20 分钟超时，解压后对两个二进制各跑一次 `-version` 自检，再原子替换 `bin` 目录，失败回滚旧版本。
+- **接口**：`GET /compression-tiers/api/ffmpeg` 读状态（含下载进度），`POST` `{"action":"download"}` 启动后台下载；页面在下载期间轮询进度条。
+- **边界**：托管版只覆盖 Windows；Linux / macOS 没有托管源，面板只显示 PATH 检测结果。下载源是当前 release 而非固定版本，钉住的只有 URL 与自检。
+
+> 与 `gh` 的管理方式一致：不写系统环境变量，只在本进程 PATH 前插；未完成或失败的下载保留 `.part` 文件，重试时续传。
 
 ## 五档参数
 
@@ -139,7 +162,7 @@
 | `compression_tiers` | 读取或切换档位；可选 `routeLines` 写入按路由覆盖（`provider model headroomTokens [retainTokens]`，每行一条，最多 16 条）。未知档位直接报错，不会静默回退。 |
 | `compression_context` | 只读：已用 tokens、窗口、本档自动阈值、压缩后逐字保留量、距自动压缩还剩多少。 |
 | `compression_compact` | 排队一次主动压缩：本轮 `turn/end` 后执行（可低于自动阈值），完成后发送 follow-up 自动续跑。 |
-| `github_push` | 发布当前工作区：`repo`（可选绝对路径）+ `force`（可选，绕过密钥拦截）。内部 = 网络体检 → 密钥扫描 → 带超时的 `git push` → 失败分类与待推列表，返回结构化结果与一段 `text`。 |
+| `github_push` | 发布当前工作区：`repo`（可选绝对路径）+ `force`（可选，绕过密钥拦截）。内部 = 网络体检 → 密钥扫描 → 带超时的 `git push` → 失败分类与待推列表，返回结构化结果与一段 `text`。会话头绑定了在线仓库时，默认推到该仓库的 URL。 |
 
 `compression_compact` 需要预设隔离域里的压缩引擎。宿主侧只有 token 计量时，它会明确返回"没有可用的压缩服务"，而不是假装成功。
 
@@ -162,7 +185,8 @@
 - 对预设结构的访问是防御式的：DSH 升级改了私有结构时，插件放弃更新并保留官方默认，而不是让预设激活失败。
 - 设置路由走官方 `webServer`，并用 `connection.requestRejection` 做同源与浏览器认证；拿不到校验服务时 fail closed。
 - 全局规则没有第二份状态：`<DSH home>/AGENTS.md` 本身就是唯一事实来源，插件只负责原子写入和提示摘要；文件删掉等于没有规则。
-- GitHub CLI 的托管副本与下载暂存放在插件目录 `<DSH home>/compression-tiers/gh`，与工作台的 `homerdsh/components` 互不干扰；PATH 前插只影响本进程，不改系统环境变量。
+- GitHub CLI 的托管副本与下载暂存放在插件目录 `<DSH home>/compression-tiers/gh`，与工作台的 `homerdsh/components` 互不干扰；PATH 前插只影响本进程，不改系统环境变量。ffmpeg / ffprobe 的托管副本同理放在 `<DSH home>/compression-tiers/ffmpeg`。
+- 会话发布仓库只是 `settings.json` 里的一张 `sessionRepos` 表（会话 id → `owner/name`），不是新的事实来源；删掉条目即回到 `github.remote`。
 - 状态文件与引擎都是可重建的：删掉设置文件后，下次激活会重新沿用当前引擎策略。
 
 ## 兼容性与限制
@@ -175,10 +199,12 @@
 - **规则大小**：单次保存上限 100,000 字符，超出直接 413；系统提示里的摘要固定 2,000 字符，超出部分仍由官方加载器在会话开始时读取。
 - **GitHub CLI 需要网络**：托管版从 github.com 下载，企业代理或内网可能失败；失败会保留 `.part` 文件，重试时续传。下载只校验大小和 `gh --version`，不固定压缩包 SHA-256。
 - **系统已有 gh**：面板显示「系统已安装（PATH）」，可以直接登录；点「仍要下载」会安装托管版并优先使用。
+- **ffmpeg 只从 gyan.dev 下载**：需要能访问 `www.gyan.dev`，企业代理或内网可能失败；失败保留 `.part`，重试续传。托管源只有 Windows，Linux / macOS 用 PATH 里的版本；下载的是当前 release 构建，钉住的只有 URL 与安装后的 `-version` 自检。
+- **会话仓库绑定只改推送目标**：不会 clone，也不会把工作区切到那个仓库；绑定按持久会话 id 存在 `sessionRepos`，最多 200 条，超出后最旧的被丢弃。
 - **登录凭据位置**：`gh auth login` 把凭据写进 gh 自己的存储（Windows 上是 `%APPDATA%\GitHub CLI`），不写 DSH 数据目录，也不会进转移包。
 - **浏览器刷新**：切换档位对引擎立即生效；设置页自身的状态通过接口刷新，个别情况下需要刷新页面重新读取。
 - **中文/英文**：设置页与插件详情按 DSH 语言环境显示；智能体面向的提示与工具描述为英文。
-- **仓库 UI 全部下线**：1.4.x 的侧栏面板在 1.5.0 删除，1.5.1 又拿掉了设置页里的默认仓库与推送/建仓/查看；`settings.json` 里的 `github.repos`、`github.repoPath` 会在下一次写入时被清掉。推多个仓库就让智能体在各自工作区里调用 `github_push`。
+- **仓库 UI 全部下线**：1.4.x 的侧栏面板在 1.5.0 删除，1.5.1 又拿掉了设置页里的默认仓库与推送/建仓/查看；`settings.json` 里的 `github.repos`、`github.repoPath` 会在下一次写入时被清掉。推多个仓库就让智能体在各自工作区里调用 `github_push`。1.6.0 只在会话标题旁加了一个按会话绑定的在线仓库选择器，仍然没有仓库列表面板，也没有推送按钮。
 
 ## 为什么是这五档
 
@@ -190,7 +216,7 @@
 ## 开发
 
 ```bash
-npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、发布流程、manifest 规范
+npm test          # node --test：档位公式、路由解析、状态读写、引擎同步、占用行、规则、GitHub CLI、发布流程、ffmpeg、会话绑定、manifest 规范
 node --check index.js
 ```
 
@@ -205,7 +231,8 @@ src/context-meter.js  实时占用计算、[context] 尾行、compression_contex
 src/manual-compact.js 主动压缩队列（compactNow + follow-up）
 src/store.js          状态文件读写（JSON 与原子文本写入）
 src/rules.js          全局规则文件：路径、读取、校验、原子写入、提示摘要
-src/gh.js             GitHub CLI：托管下载（断点续传/回滚）、PATH 检测、设备码登录
+src/gh.js             GitHub CLI：托管下载（断点续传/回滚）、PATH 检测、设备码登录、仓库列表
+src/ffmpeg.js         ffmpeg / ffprobe：PATH 检测、托管下载（续传、自检、原子替换）
 src/publish.js        网络体检、仓库快照、带超时的 push、建仓校验、密钥扫描
 src/push-flow.js      发布流程：目录选择 → 代理 → 密钥扫描 → push → 报告（设置页与 github_push 共用）
 src/routes.js         按路由覆盖解析

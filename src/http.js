@@ -59,6 +59,15 @@ export function sendJson(res, status, body) {
   }
 }
 
+/** One query parameter of the request URL, or undefined when it is absent. */
+export function queryParam(req, name) {
+  const url = String(req && typeof req.url === 'string' ? req.url : '')
+  const at = url.indexOf('?')
+  if (at < 0) return undefined
+  const value = new URLSearchParams(url.slice(at + 1)).get(name)
+  return value === null ? undefined : value
+}
+
 export async function readBody(req, limit = MAX_BODY_BYTES) {
   requireJson(req)
   const chunks = []

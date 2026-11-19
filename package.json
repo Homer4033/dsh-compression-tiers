@@ -1,10 +1,13 @@
 {
   "name": "dsh-compression-tiers",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": false,
   "type": "module",
-  "description": "Five-tier context compression policy for official DeepSeek Harness plus a global rules editor and GitHub publishing: settings page, agent tools (compression_tiers, compression_context, compression_compact, github_push), live occupancy meter, proactive compaction, $DSH_HOME/AGENTS.md, and managed gh with device-code login.",
+  "description": "Five-tier context compression policy for official DeepSeek Harness plus a global rules editor and GitHub publishing: settings page, agent tools (compression_tiers, compression_context, compression_compact, github_push), live occupancy meter, proactive compaction, $DSH_HOME/AGENTS.md, managed gh with device-code login, a per-session online repository binding in the session header, and a resumable managed ffmpeg/ffprobe install.",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Homer",
   "keywords": [
     "deepseek-harness",
@@ -45,7 +48,7 @@
   ],
   "engines": {
     "node": ">=24.9.0",
-    "dsh": "0.2.2-rc.3"
+    "dsh": ">=0.2.2-rc.3 <0.3.0"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-home-paths": "*",

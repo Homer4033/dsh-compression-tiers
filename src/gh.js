@@ -3,6 +3,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { basename, dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
+import { proxyEnv } from './publish.js'
 
 /**
  * GitHub CLI (`gh`) management, merged in from `homerdsh-workbench`. The
@@ -200,11 +201,12 @@ export async function downloadWithResume({ url, partPath: target, fetchImpl = fe
   return { received, total, resumedFrom: restart ? 0 : existing }
 }
 
-function runCommand(command, args, { timeoutMs = COMMAND_TIMEOUT_MS } = {}) {
+/** Run a command with a deadline, capturing both streams; shared with the ffmpeg manager. */
+export function runCommand(command, args, { timeoutMs = COMMAND_TIMEOUT_MS, env = process.env } = {}) {
   return new Promise((resolve) => {
     let child
     try {
-      child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+      child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env })
     } catch (error) {
       // On Windows an invalid executable can throw from spawn() itself.
       resolve({ code: 127, stdout: '', stderr: error && error.message ? error.message : String(error) })
@@ -237,7 +239,7 @@ function runCommand(command, args, { timeoutMs = COMMAND_TIMEOUT_MS } = {}) {
 }
 
 /** Extract a zip with the platform `tar` (bsdtar reads zip), then PowerShell. */
-async function extractArchive(archivePath, destDir, kind, platform = process.platform) {
+export async function extractArchive(archivePath, destDir, kind, platform = process.platform) {
   mkdirSync(destDir, { recursive: true })
   if (kind === 'tar.gz') {
     const extracted = await runCommand('tar', ['-xzf', archivePath, '-C', destDir], { timeoutMs: EXTRACT_TIMEOUT_MS })
@@ -500,9 +502,61 @@ export async function ghAuthStatus(home, { platform = process.platform, arch = p
   }
 }
 
+/**
+ * `gh repo list --json nameWithOwner,isPrivate,updatedAt,pushedAt` output →
+ * sorted rows. A row that does not look like `owner/name` is dropped: the value
+ * ends up in a git command line.
+ */
+export function parseRepoList(output) {
+  let parsed
+  try {
+    parsed = JSON.parse(String(output || ''))
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  const seen = new Set()
+  const repos = []
+  for (const row of parsed) {
+    const name = typeof row?.nameWithOwner === 'string' ? row.nameWithOwner.trim() : ''
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(name) || name.length > 200) continue
+    if (seen.has(name)) continue
+    seen.add(name)
+    repos.push({
+      nameWithOwner: name,
+      private: row.isPrivate === true,
+      updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : null,
+      pushedAt: typeof row.pushedAt === 'string' ? row.pushedAt : null,
+    })
+  }
+  return repos
+}
+
+/**
+ * The signed-in account's repositories, so a session can be bound to one.
+ * `gh` inherits the proxy from the environment; a missing login is reported as
+ * such instead of an empty list.
+ */
+export async function listRepos(home, { limit = 100, proxy = null, platform = process.platform, envPath = process.env.PATH, env = process.env } = {}) {
+  const gh = resolveGh(home, platform, envPath)
+  if (!gh) return { ok: false, error: 'gh-not-installed', repos: [], detail: '' }
+  const result = await runCommand(gh, [
+    'repo', 'list',
+    '--limit', String(limit),
+    '--json', 'nameWithOwner,isPrivate,updatedAt,pushedAt',
+  ], { timeoutMs: 30_000, env: proxy ? { ...env, ...proxyEnv(proxy) } : env })
+  const detail = `${result.stdout}${result.stderr}`.trim().slice(-400)
+  if (result.code !== 0) {
+    const failure = /not logged in|authentication|gh auth login/i.test(detail)
+      ? 'not-authenticated'
+      : /dial tcp|timeout|connection|proxy/i.test(detail) ? 'network' : 'failed'
+    return { ok: false, error: failure, repos: [], detail }
+  }
+  return { ok: true, error: null, repos: parseRepoList(result.stdout), detail }
+}
+
 /** Device-code page `gh` sends the user to once the flow starts. */
 const GH_DEVICE_URL = 'https://github.com/login/device'
-
 /** One-time code `gh` prints, e.g. `ABCD-1234`. */
 const GH_CODE = /\b([A-Z0-9]{4}-[A-Z0-9]{4})\b/
 
