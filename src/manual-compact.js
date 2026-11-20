@@ -144,8 +144,17 @@ export function attachCompactQueue(ctx, deps) {
         return
       }
       if (event.type === 'user/message') {
-        if (job.state === 'running' && event.data && event.data.source && event.data.source.kind === 'user') {
+        const source = job && event.data && event.data.source ? event.data.source : null
+        if (source && source.kind === 'user') {
+          // The human took the turn: never compact under them, and never inject
+          // a "continue" message that would answer them out of order. A queued
+          // job is dropped here; a running one notices `userSpoke` and skips the
+          // resume after the compaction it already started.
           job.userSpoke = true
+          if (job.state === 'queued') {
+            jobs.delete(id)
+            trace('compact:user-took-over', { sessionId: id })
+          }
         }
         return
       }

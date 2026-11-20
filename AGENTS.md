@@ -64,6 +64,7 @@
 - 修改 `src/publish.js` 或 `/compression-tiers/api/github/network` 后，`test/publish.test.js` 必须覆盖代理归一化与优先级、GitHub 连通判定（直连 / 代理 / 代理不通 / 全断）、失败分类、push 的代理注入与超时终止、仓库快照、建仓确认与密钥扫描。
 - 修改 `src/push-flow.js` 或 `github_push` 工具后，`test/push-flow.test.js` 必须覆盖目录选择（显式 → 会话，无兜底）、不可用路径早退、密钥拦截与 `force` 放行、失败分类与报告文案；发布只能有 `github_push` 一个入口，不要再往设置页加推送按钮。会话绑定生效时还必须覆盖 `target` 作为远端、不再取仓库快照、以及拒绝推送时仍报告 `target`。
 - 修改 `src/ffmpeg.js` 或 `/compression-tiers/api/ffmpeg` 后，`test/ffmpeg.test.js` 必须覆盖托管源选择、`-version` 解析、PATH 检测与托管优先、状态（missing / partial / installed）与 PATH 前插；真实下载只在临时 home 验证，不写用户 DSH home。
+- 修改 `src/manual-compact.js`（主动压缩队列）后，`test/manual-compact.test.js` 必须覆盖：排队后 `turn/end` 才压缩并注入一次续跑、重复请求被拒、`aborted` 丢弃、**真人消息优先**（结束前发言取消排队任务、压缩中发言只取消续跑）、宿主已按阈值压缩时不重复压缩但仍续跑。真人发言不得被压缩流程吞掉，也不得被续跑消息抢先回答。
 - 修改会话发布仓库（`sessionRepos`、`/api/github/online`、`/api/github/binding`）后，`test/gh.test.js` 覆盖仓库行解析与 `gh` 缺失分类，`test/store.test.js` 覆盖 `owner/name` 归一化与 200 条上限，`test/client.test.js` 覆盖会话头选择器的注册、选项与状态提示。
 - 修改 `src/http.js` 的 `queryParam` 后，`test/http.test.js` 必须覆盖缺参、空值与非字符串请求。
 - 修改 `src/tools-path.js`、`/compression-tiers/api/tools` 或设置页的下载目录区块后，`test/tools-path.test.js` 必须覆盖默认根、绝对路径校验、四套组件整体迁移、目标已存在时预检拒绝、任一下载进行中 409、跨卷 `EXDEV` 回退与「搬一半后重试」；`test/store.test.js` 覆盖 `toolsPath` 归一化，`test/client.test.js` 覆盖迁移与恢复默认按钮的禁用态。
@@ -108,3 +109,4 @@
 - 2026-11-21：1.8.0 的观感修正：ffmpeg 一行固定列出 `ffmpeg` 与 `ffprobe` 两个二进制（缺哪个显示「未找到」，不再因整对缺失而省掉副行）；`downloadKeep` 文案由「仍要下载」改为「重新下载」（英文 `Download again`）；空的状态行/提示行（`ct-status` / `ct-note` 无内容）收起，档位与规则面板底部不再留约 30px 空白。测试增至 156 条；版本 1.8.1。
 - 2026-11-21：组件行的多二进制不再重复报缺失：找到的二进制各占一行（来源/版本/路径），所有缺的合并成一行「ffmpeg / ffprobe　未找到」，不再在「未安装」下面再逐条写「未找到」。测试增至 157 条；版本 1.8.2。
 - 2026-11-21：多二进制行的标题写成它覆盖的二进制（`ffmpeg / ffprobe`），两个都没装时只留「未安装」一行、不再补「未找到」——两者同义；只缺一个时保留该行（此时状态行是「未完成，可续传」，不同义）。版本 1.8.3。
+- 2026-11-21：主动压缩让位于真人输入：`src/manual-compact.js` 的 `user/message` 分支不再只在「压缩正在跑」时记录，任何真人消息都会取消排队中的压缩并阻止续跑消息（已开始的压缩不中断，但结束后不注入续跑）；新增 `test/manual-compact.test.js`（7 条）并把该模块纳入验证要求。测试增至 164 条；版本 1.8.4。
