@@ -1454,14 +1454,15 @@ window.__ModuleLoader__.load({
           : null)
 
       /**
-       * The binaries of a multi-binary component: one line per found binary,
-       * and a single line naming every missing one. Listing "ffmpeg 未找到 /
-       * ffprobe 未找到" under a row that already reads "未安装" says the same
-       * thing three times.
+       * The binaries of a multi-binary component: one line per found binary.
+       * Nothing is listed when none is found — the title already names the pair
+       * and the state line already says 未安装, so a "未找到" line would only
+       * repeat it. A single missing binary gets one line naming just that one.
        */
       function componentToolLines(row) {
         if (!row || !row.tools) return null
         const found = row.tools.filter(function (tool) { return Boolean(tool.path) })
+        if (found.length === 0) return null
         const missing = row.tools.filter(function (tool) { return !tool.path })
         const lines = found.map(function (tool) {
           return h('div', { className: 'ct-tool', key: tool.name },
@@ -1507,11 +1508,16 @@ window.__ModuleLoader__.load({
         })
         const pinned = row && row.version ? ' · v' + row.version : ''
         const used = row && row.toolVersion ? ' (' + row.toolVersion + ')' : ''
+        // A row that covers several binaries says so in its title, so "ffprobe
+        // is part of this row" stays visible even when there is nothing to list.
+        const title = row && row.tools
+          ? row.tools.map(function (tool) { return tool.name }).join(' / ')
+          : (row && row.name ? row.name : def.name)
         const bar = Boolean(row) && row.percent != null
           && (row.state === 'downloading' || row.state === 'partial' || row.state === 'error')
         return h('div', { className: 'ct-component', key: def.id },
           h('div', { className: 'ct-component-head' },
-            h('strong', { className: 'ct-component-name' }, row && row.name ? row.name : def.name),
+            h('strong', { className: 'ct-component-name' }, title),
             h('span', { className: 'ct-note' }, control.stateText + pinned + used)),
           bar ? h('div', { className: 'ct-progress' }, h('span', { style: { width: (row.percent || 0) + '%' } })) : null,
           row && row.path ? h('p', { className: 'ct-note ct-component-path' }, t('pathLabel') + t('sep') + row.path) : null,

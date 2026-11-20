@@ -413,7 +413,7 @@ test('the component panel renders one row per managed component', () => {
   const names = nodes
     .filter((node) => String(node.props.className || '') === 'ct-component-name')
     .map((node) => textOf(node))
-  assert.deepEqual(names, ['GitHub CLI', 'git', 'ffmpeg', 'Python'])
+  assert.deepEqual(names, ['GitHub CLI', 'git', 'ffmpeg / ffprobe', 'Python'])
   const blocks = nodes.filter((node) => String(node.props.className || '') === 'ct-component')
   assert.equal(blocks.length, 4)
   assert.match(deepText(blocks[0]), /downloadDone · v2\.76\.2/)
@@ -451,7 +451,7 @@ test('a missing ffprobe stays listed under the ffmpeg row', () => {
   assert.equal(deepText(toolRows[1]), 'ffprobetoolsNotFound')
 })
 
-test('a row with no binary at all names them once instead of repeating the state', () => {
+test('a row with no binary at all says it once instead of repeating the state', () => {
   const rows = [
     componentRow('ffmpeg', 'missing', {
       tools: [
@@ -462,8 +462,14 @@ test('a row with no binary at all names them once instead of repeating the state
   ]
   const nodes = renderPage({ components: componentsPayload(rows) })
   const toolRows = nodes.filter((node) => String(node.props.className || '') === 'ct-tool')
-  assert.equal(toolRows.length, 1, 'one combined line, not one per binary')
-  assert.equal(deepText(toolRows[0]), 'ffmpeg / ffprobetoolsNotFound')
+  assert.equal(toolRows.length, 0, 'nothing to list when neither binary is there')
+  // The title still names both binaries, and the state appears exactly once.
+  const head = nodes
+    .filter((node) => String(node.props.className || '') === 'ct-component-head')
+    .find((node) => deepText(node).startsWith('ffmpeg / ffprobe'))
+  assert.equal(deepText(head), 'ffmpeg / ffprobestateMissing')
+  const text = deepText({ props: { children: nodes } })
+  assert.equal(text.includes('toolsNotFound'), false, 'no second "未找到" line')
 })
 
 test('every component row obeys one button standard', () => {

@@ -1,6 +1,12 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.2`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.3`。
+
+## 1.8.3 — 2026-11-20
+
+- **一个组件只说一次「没有」**：ffmpeg 行的标题现在就是 `ffmpeg / ffprobe`（它覆盖的两个二进制），所以两个都没装时只有一行「ffmpeg / ffprobe　未安装」，不再在下面补「ffmpeg / ffprobe　未找到」——「未安装」和「未找到」说的是同一件事。
+- 只缺一个时仍然保留那一行（例如 `ffprobe　未找到`），因为此时状态行说的是「未完成，可续传」而不是「未找到」，两者不同义。
+- 测试：改「都没有时不另列缺失行」用例，共 157 条。
 
 ## 1.8.2 — 2026-11-20
 
