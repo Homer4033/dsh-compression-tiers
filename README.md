@@ -18,13 +18,24 @@
 
 要求 Node.js ≥ 24.9；DSH 运行时 `0.2.2-rc.3` 到 `0.3.0` 之前（`engines.dsh` 声明）。
 
+**从 npm 安装（推荐）**
+
+包名 `dsh-harness-toolbox`（已发布在 npmjs.com，版本见 `npm view dsh-harness-toolbox version`）：
+
+1. DSH → **插件 → 添加插件**，输入包名 `dsh-harness-toolbox`（要锁版本就写 `dsh-harness-toolbox@1.8.5`）；
+2. 安装完成后打开新会话 → **设置 → 上下文压缩**。
+
+也可以在会话里让智能体用 `plugin_manager` 安装这个包名。
+
+**从本地目录安装**
+
 1. 把本仓库放到任意目录；
 2. DSH → **插件 → 添加插件**，选择这个目录；
 3. 打开新会话 → **设置 → 上下文压缩**。
 
-也可以在会话里让智能体用 `plugin_manager` 的 `install_bundle` 安装。安装与启用都交给 DSH（不要手改 profile 的 `package.json` / `cordis.patch.yml`）。
+安装与启用都交给 DSH（不要手改 profile 的 `package.json` / `cordis.patch.yml`）。宿主包（`@deepseek-ai/dsh-home-paths`、`@deepseek-ai/dsh-tools`）由运行时提供，本包只声明为可选 `peerDependencies`，这样以「链接到外部目录」方式安装也能解析。
 
-宿主包（`@deepseek-ai/dsh-home-paths`、`@deepseek-ai/dsh-tools`）由运行时提供，本包只声明为可选 `peerDependencies`，这样以「链接到外部目录」方式安装也能解析。
+> 国内镜像（npmmirror）同步可能滞后：插件页装不到刚发布的版本时，先用上面的 `npm view` 确认线上版本，再等镜像同步或换 registry。
 
 ## 使用
 
