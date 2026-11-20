@@ -1453,6 +1453,30 @@ window.__ModuleLoader__.load({
           ? h('p', { className: 'ct-note' }, t('rulesPathLabel') + t('sep') + rules.path + (rules.exists === false ? ' — ' + t('rulesMissing') : ''))
           : null)
 
+      /**
+       * The binaries of a multi-binary component: one line per found binary,
+       * and a single line naming every missing one. Listing "ffmpeg 未找到 /
+       * ffprobe 未找到" under a row that already reads "未安装" says the same
+       * thing three times.
+       */
+      function componentToolLines(row) {
+        if (!row || !row.tools) return null
+        const found = row.tools.filter(function (tool) { return Boolean(tool.path) })
+        const missing = row.tools.filter(function (tool) { return !tool.path })
+        const lines = found.map(function (tool) {
+          return h('div', { className: 'ct-tool', key: tool.name },
+            h('span', { className: 'ct-tool-name' }, tool.name),
+            h('span', { className: 'ct-note' }, (tool.managed ? t('toolsManaged') : t('toolsSystem')) + (tool.version ? ' v' + tool.version : '')),
+            tool.path ? h('span', { className: 'ct-tool-path' }, tool.path) : null)
+        })
+        if (missing.length > 0) {
+          lines.push(h('div', { className: 'ct-tool', key: 'missing' },
+            h('span', { className: 'ct-tool-name' }, missing.map(function (tool) { return tool.name }).join(' / ')),
+            h('span', { className: 'ct-note' }, t('toolsNotFound'))))
+        }
+        return h('div', { className: 'ct-tools-list' }, lines)
+      }
+
       // ---- component panel: four rows plus the download root they share ----
       const rootInfo = components && components.root ? components.root : null
       const rootPath = rootInfo && rootInfo.path ? String(rootInfo.path) : ''
@@ -1491,16 +1515,7 @@ window.__ModuleLoader__.load({
             h('span', { className: 'ct-note' }, control.stateText + pinned + used)),
           bar ? h('div', { className: 'ct-progress' }, h('span', { style: { width: (row.percent || 0) + '%' } })) : null,
           row && row.path ? h('p', { className: 'ct-note ct-component-path' }, t('pathLabel') + t('sep') + row.path) : null,
-          row && row.tools
-            ? h('div', { className: 'ct-tools-list' }, row.tools.map(function (tool) {
-              return h('div', { className: 'ct-tool', key: tool.name },
-                h('span', { className: 'ct-tool-name' }, tool.name),
-                h('span', { className: 'ct-note' }, (tool.path
-                  ? (tool.managed ? t('toolsManaged') : t('toolsSystem'))
-                  : t('toolsNotFound')) + (tool.version ? ' v' + tool.version : '')),
-                tool.path ? h('span', { className: 'ct-tool-path' }, tool.path) : null)
-            }))
-            : null,
+          componentToolLines(row),
           row && row.error ? h('p', { className: 'ct-status', role: 'alert' }, row.error) : null,
           actionRow([
             actionButton('download:' + def.id, control.label, {

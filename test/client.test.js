@@ -446,9 +446,24 @@ test('a missing ffprobe stays listed under the ffmpeg row', () => {
   ]
   const nodes = renderPage({ components: componentsPayload(rows) })
   const toolRows = nodes.filter((node) => String(node.props.className || '') === 'ct-tool')
-  assert.equal(toolRows.length, 2, 'both binaries are listed')
+  assert.equal(toolRows.length, 2, 'the found binary and the missing one')
   assert.match(deepText(toolRows[0]), /toolsManaged v7\.1\.1/)
-  assert.match(deepText(toolRows[1]), /toolsNotFound/)
+  assert.equal(deepText(toolRows[1]), 'ffprobetoolsNotFound')
+})
+
+test('a row with no binary at all names them once instead of repeating the state', () => {
+  const rows = [
+    componentRow('ffmpeg', 'missing', {
+      tools: [
+        { name: 'ffmpeg', path: null, version: null, managed: false },
+        { name: 'ffprobe', path: null, version: null, managed: false },
+      ],
+    }),
+  ]
+  const nodes = renderPage({ components: componentsPayload(rows) })
+  const toolRows = nodes.filter((node) => String(node.props.className || '') === 'ct-tool')
+  assert.equal(toolRows.length, 1, 'one combined line, not one per binary')
+  assert.equal(deepText(toolRows[0]), 'ffmpeg / ffprobetoolsNotFound')
 })
 
 test('every component row obeys one button standard', () => {

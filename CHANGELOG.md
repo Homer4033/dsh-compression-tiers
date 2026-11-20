@@ -1,6 +1,11 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.1`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.2`。
+
+## 1.8.2 — 2026-11-20
+
+- **ffmpeg 一行不再三重否定**：整行已经写着「未安装」，下面又列「ffmpeg 未找到」「ffprobe 未找到」，同一件事说三遍。现在找到的二进制各自一行（带来源、版本、路径），所有缺的合并成一行「ffmpeg / ffprobe　未找到」；只缺一个时那一行就只写缺的那个。
+- 测试：新增「两个二进制都缺只出现一行」用例，共 157 条。
 
 ## 1.8.1 — 2026-11-20
 
