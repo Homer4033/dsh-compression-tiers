@@ -209,6 +209,114 @@ test('a 416 response drops the stale part and restarts the download', async () =
   }
 })
 
+test('a dropped connection is retried and resumes from the part file', async () => {
+  const home = tempHome()
+  try {
+    const target = join(home, 'download', 'gh.zip.part')
+    mkdirSync(join(home, 'download'), { recursive: true })
+    writeFileSync(target, 'aaa')
+    let calls = 0
+    const seenRanges = []
+    const fetchImpl = async (_url, options) => {
+      calls += 1
+      seenRanges.push(options.headers.Range || null)
+      if (calls === 1) {
+        const error = new Error('fetch failed')
+        error.code = 'ECONNRESET'
+        throw error
+      }
+      return {
+        status: 206,
+        headers: new Headers({ 'content-range': 'bytes 3-5/6', 'content-length': '3' }),
+        body: streamOf('bbb'),
+      }
+    }
+    const retried = []
+    const result = await downloadWithResume({
+      url: 'https://example.test/gh.zip',
+      partPath: target,
+      fetchImpl,
+      retryDelayMs: 0,
+      onRetry: (info) => retried.push({ attempt: info.attempt, retries: info.retries }),
+    })
+    assert.equal(calls, 2)
+    // The second attempt continues from the bytes the first one left behind.
+    assert.deepEqual(seenRanges, ['bytes=3-', 'bytes=3-'])
+    assert.deepEqual(retried, [{ attempt: 1, retries: 3 }])
+    assert.equal(readFileSync(target, 'utf8'), 'aaabbb')
+    assert.equal(result.received, 6)
+    assert.equal(result.resumedFrom, 3)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('an answer that will not change is not retried', async () => {
+  const home = tempHome()
+  try {
+    const target = join(home, 'download', 'gh.zip.part')
+    let calls = 0
+    const fetchImpl = async () => {
+      calls += 1
+      return { status: 404, headers: new Headers({}), body: null }
+    }
+    await assert.rejects(
+      downloadWithResume({ url: 'https://example.test/gh.zip', partPath: target, fetchImpl, retryDelayMs: 0 }),
+      /HTTP 404/,
+    )
+    assert.equal(calls, 1)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('an aborted download is not retried and the part file stays', async () => {
+  const home = tempHome()
+  try {
+    const target = join(home, 'download', 'gh.zip.part')
+    mkdirSync(join(home, 'download'), { recursive: true })
+    writeFileSync(target, 'aaa')
+    const controller = new AbortController()
+    controller.abort(new Error('download timed out'))
+    let calls = 0
+    const fetchImpl = async () => {
+      calls += 1
+      const error = new Error('This operation was aborted')
+      error.name = 'AbortError'
+      throw error
+    }
+    await assert.rejects(
+      downloadWithResume({ url: 'https://example.test/gh.zip', partPath: target, fetchImpl, signal: controller.signal, retryDelayMs: 0 }),
+      /aborted|timed out/i,
+    )
+    assert.equal(calls, 1)
+    assert.equal(readFileSync(target, 'utf8'), 'aaa')
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('the retry budget is finite and reports how many attempts it made', async () => {
+  const home = tempHome()
+  try {
+    const target = join(home, 'download', 'gh.zip.part')
+    let calls = 0
+    const fetchImpl = async () => {
+      calls += 1
+      const error = new Error('socket hang up')
+      error.code = 'ECONNRESET'
+      throw error
+    }
+    await assert.rejects(
+      downloadWithResume({ url: 'https://example.test/gh.zip', partPath: target, fetchImpl, retries: 2, retryDelayMs: 0 }),
+      /socket hang up .*gave up after 3 attempts/,
+    )
+    assert.equal(calls, 3)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
 test('findBinary walks nested archive directories', () => {
   const home = tempHome()
   try {

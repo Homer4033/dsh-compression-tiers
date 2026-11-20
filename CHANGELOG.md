@@ -1,6 +1,12 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.6`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.7`。
+
+## 1.8.7 — 2026-11-21
+
+- **组件下载掉线自动重试**：以前只有「断点续传」——中断后 `.part` 留在磁盘上，但必须人再点一次「继续下载」。现在 `downloadWithResume` 自己在掉线时重试：默认 3 次（共 4 次尝试），退避 1.5s / 3s / 6s，**每次重试都从 `.part` 的字节偏移继续**（`Range: bytes=N-`），所以哪怕下到 100 MB 掉线也只补差额。gh / ffmpeg / git / python 四套组件共用这一段，一起生效。
+- 不会重试的情况：`404` / `403` 这类再试也不会变的回答（`429` / `5xx` / `408` 会重试）、以及已经 `aborted` 的信号（20 分钟超时或人取消）——这两种立刻失败，省掉没有意义的十几秒等待。重试预算用尽后错误信息会带上「(gave up after N attempts)」，`.part` 依然保留，页面照旧给「继续下载」。
+- 测试 170 条（新增 4 条：掉线重试并从 `.part` 续传、4xx 不重试、`aborted` 不重试且 `.part` 保留、预算用尽时报出尝试次数）。
 
 ## 1.8.6 — 2026-11-21
 

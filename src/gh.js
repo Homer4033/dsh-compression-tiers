@@ -165,12 +165,58 @@ async function fetchKeepingRange(url, headers, signal, fetchImpl, hops = 0) {
   return response
 }
 
+/** Defaults for {@link downloadWithResume}'s automatic retries. */
+const DOWNLOAD_RETRIES = 3
+const DOWNLOAD_RETRY_DELAY_MS = 1500
+
+/** HTTP statuses that are worth another attempt; other 4xx answers are final. */
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504])
+
+/** Socket / fetch error codes a retry can plausibly fix. */
+const RETRYABLE_CODE = new Set([
+  'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED', 'EPIPE', 'ETIMEDOUT', 'ENETUNREACH',
+  'ENETDOWN', 'EHOSTUNREACH', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+])
+
 /**
- * Download with HTTP `Range` resume: an interrupted run keeps its `.part`
- * file and the next attempt continues from its byte offset. A `416` means the
- * partial file belongs to another version, so it is dropped and refetched.
+ * Whether the failure is a dropped connection rather than a real answer: a 404
+ * or an aborted signal will fail exactly the same way next time, so retrying it
+ * only delays the error the page has to show.
  */
-export async function downloadWithResume({ url, partPath: target, fetchImpl = fetch, onProgress, signal }) {
+function isRetryableDownloadError(error, signal) {
+  if (!error || signal?.aborted) return false
+  if (error.name === 'AbortError') return false
+  if (typeof error.status === 'number') return RETRYABLE_STATUS.has(error.status)
+  if (RETRYABLE_CODE.has(String(error.code || ''))) return true
+  return /fetch failed|socket hang up|other side closed|premature|network|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(String(error.message || ''))
+}
+
+/** `setTimeout` that rejects as soon as the download is aborted. */
+function waitForRetry(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    const abortError = () => (signal.reason instanceof Error ? signal.reason : new Error('download aborted'))
+    if (signal?.aborted) {
+      reject(abortError())
+      return
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener?.('abort', onAbort)
+      resolve()
+    }, delayMs)
+    function onAbort() {
+      clearTimeout(timer)
+      reject(abortError())
+    }
+    signal?.addEventListener?.('abort', onAbort, { once: true })
+  })
+}
+
+/**
+ * One download attempt. The `.part` file is the resume point, so a previous
+ * attempt's bytes are counted from disk every time this runs.
+ */
+async function downloadAttempt({ url, partPath: target, fetchImpl, onProgress, signal }) {
   mkdirSync(dirname(target), { recursive: true })
   let existing = existsSync(target) ? statSync(target).size : 0
   const request = (resume) => fetchKeepingRange(
@@ -186,7 +232,9 @@ export async function downloadWithResume({ url, partPath: target, fetchImpl = fe
     response = await request(false)
   }
   if (response.status !== 200 && response.status !== 206) {
-    throw new Error(`download failed HTTP ${response.status}`)
+    const error = new Error(`download failed HTTP ${response.status}`)
+    error.status = response.status
+    throw error
   }
   const restart = response.status === 200
   const contentRange = response.headers.get('content-range') || ''
@@ -207,6 +255,46 @@ export async function downloadWithResume({ url, partPath: target, fetchImpl = fe
   })
   await pipeline(source, file)
   return { received, total, resumedFrom: restart ? 0 : existing }
+}
+
+/**
+ * Download with HTTP `Range` resume: an interrupted run keeps its `.part`
+ * file and the next attempt continues from its byte offset. A `416` means the
+ * partial file belongs to another version, so it is dropped and refetched.
+ *
+ * A dropped connection is retried automatically (`retries` extra attempts with
+ * an exponential backoff) and every retry resumes from the `.part` file, so a
+ * flaky link costs seconds instead of the whole archive. Answers that will not
+ * change (404 and friends) and an aborted signal fail at once — the page then
+ * offers 「继续下载」 on the kept `.part` file.
+ */
+export async function downloadWithResume({
+  url,
+  partPath: target,
+  fetchImpl = fetch,
+  onProgress,
+  onRetry,
+  signal,
+  retries = DOWNLOAD_RETRIES,
+  retryDelayMs = DOWNLOAD_RETRY_DELAY_MS,
+}) {
+  let attempts = 0
+  for (;;) {
+    attempts += 1
+    try {
+      return await downloadAttempt({ url, partPath: target, fetchImpl, onProgress, signal })
+    } catch (error) {
+      if (attempts > retries || !isRetryableDownloadError(error, signal)) {
+        if (attempts > 1 && error instanceof Error) {
+          error.message = `${error.message} (gave up after ${attempts} attempts)`
+        }
+        throw error
+      }
+      const delayMs = retryDelayMs * 2 ** (attempts - 1)
+      onRetry?.({ attempt: attempts, retries, delayMs, error })
+      await waitForRetry(delayMs, signal)
+    }
+  }
 }
 
 /** Run a command with a deadline, capturing both streams; shared with the ffmpeg manager. */
