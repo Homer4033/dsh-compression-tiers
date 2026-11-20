@@ -309,6 +309,12 @@ test('the client factory registers a localized settings section', () => {
   // settings page and must not depend on that page having been opened.
   assert.equal(styles.length, 1)
   assert.match(styles[0].textContent, /\.ct-repo-pill \{/)
+  // The pill sits in the tab strip right after the tabs (under the title); it is
+  // not pushed to the far right edge and does not grow the official header.
+  const slotCss = String(styles[0].textContent).match(/\.ct-repo-slot \{[^}]*\}/)
+  assert.ok(slotCss, 'the pill slot keeps its own rule')
+  assert.match(slotCss[0], /margin-top: -4px/)
+  assert.doesNotMatch(slotCss[0], /margin-left/)
   assert.match(styles[0].textContent, /\.ct-page \{/)
   assert.match(styles[0].textContent, /\.ct-component \{/)
   // Empty status/note lines must collapse instead of leaving a gap in the panel.
@@ -684,6 +690,19 @@ test('the session header renders a repository pill that opens a listbox', () => 
     '✓Homer4033/dsh-compression-tiers',
     'Homer4033/private-notesrepoPrivate',
   ])
+})
+
+test('the repository listbox is titled and separates "no repository"', () => {
+  const repos = [{ nameWithOwner: 'Homer4033/one', private: false }]
+  const nodes = renderHeader([repos, '', '', false, true, null], { sessionId: 'session-menu', t: (key) => key })
+  const head = nodes.find((node) => String(node.props.className || '') === 'ct-repo-menu-head')
+  assert.ok(head, 'the listbox renders a title line')
+  assert.equal(head.props.role, 'presentation')
+  assert.equal(textOf(head), 'repoSelectLabel')
+  const order = nodes
+    .filter((node) => ['ct-repo-menu-head', 'ct-repo-sep', 'ct-repo-option'].includes(String(node.props.className || '').split(' ')[0]))
+    .map((node) => String(node.props.className || '').split(' ')[0])
+  assert.deepEqual(order, ['ct-repo-menu-head', 'ct-repo-option', 'ct-repo-sep', 'ct-repo-option'])
 })
 
 test('a retired binding stays selectable; a closed pill renders no listbox', () => {

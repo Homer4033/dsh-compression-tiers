@@ -1,6 +1,14 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.5`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.6`。
+
+## 1.8.6 — 2026-11-21
+
+- **会话头仓库胶囊挪到标题下面**：以前它被 `margin-left: auto` 甩到 View 标签行的最右端，和标题隔着上千像素的空白。现在紧跟标签之后，就在标题正下方、和「对话 / 轨迹」同一行；`margin-top: -4px` 让 24px 胶囊与标签文字基线对齐（由官方 `.tab` 的 -10px 外边距 + 10px 内边距推出，实测偏差 0px）。没有改官方 `titleRow` / `tabs` 的布局——header 高度是桌面窗口 chrome 几何的锚点。
+- **胶囊更轻一点**：高度 26 → 24px，圆角胶囊、边距收紧；描边默认 `border-l2`、悬停升到 `border-l3`（深色主题里 l3 比 l2 明显）；展开时箭头旋转 180° 并带 140ms 过渡；标题「仓库」降到 11px，仓库名加 500 字重；`max-width` 260 → 300px，`owner/name` 不再被截断（实测 30 字符名字自然宽度 266px）。
+- **下拉菜单加了结构**：顶部一行标题「仓库」，`不使用仓库` 与仓库列表之间有分隔线；选项高度 30 → 32px，选中项名字加粗。仍然只有一份 portal、Esc / 外部点击 / resize 关闭。
+- 测试 166 条（新增菜单标题 + 分隔线顺序、胶囊位置两条断言）。
+- 渲染验证方式：把官方 `ConversationRoot` 的编译后 CSS 与插件样式表拼成一个静态页，用无头 Chromium 量出胶囊与标签文字中心线 `dy = 0.0px`、无文本截断，并截图核对（`output/capture/`）。真实 DSH 窗口内的最终观感仍需刷新页面确认。
 
 ## 1.8.5 — 2026-11-20
 

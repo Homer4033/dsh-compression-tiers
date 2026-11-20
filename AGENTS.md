@@ -49,7 +49,7 @@
 11. 登录只驱动 `gh auth login --web` 的设备码流程，不读取、不复制、不代存 `gh` 凭据；取消时结束子进程并丢弃会话状态。
 12. ffmpeg / ffprobe 下载用 `SOURCES` 里的 URL 与 HTTP Range 续传；解压后必须先对暂存的两个二进制各跑一次 `-version`，再原子替换 `bin` 目录、失败回滚旧版本；只把托管 `bin` 目录插到本进程 PATH 最前，不写系统环境变量。托管源只有 Windows，其它平台只做 PATH 检测。
 13. 会话发布仓库只允许改 `github_push` 的推送目标：不得因此克隆仓库、切换分支或改动会话工作区；绑定归一化必须是 `owner/name`，非法值丢弃，最多保留 200 条。
-14. 会话头选择器注册在官方 `conversation.session.header.actions`（id `compression-repo`）；不得改标题、工作区选择器或其它官方 slot 的注册。官方 header 对标题旁动作是 `overflow: clip`，需要渲染到标题下方时只能用 portal 挂到 View 标签行（`[data-conversation-tabs]` 的父节点）并负责清理，拿不到标签行就退回内联。
+14. 会话头选择器注册在官方 `conversation.session.header.actions`（id `compression-repo`）；不得改标题、工作区选择器或其它官方 slot 的注册。官方 header 对标题旁动作是 `overflow: clip`，需要渲染到标题下方时只能用 portal 挂到 View 标签行（`[data-conversation-tabs]` 的父节点）并负责清理，拿不到标签行就退回内联。胶囊固定在标签行内、紧跟标签之后（不得再用 `margin-left: auto` 甩到最右边），`margin-top: -4px` 让 24px 胶囊与标签文字基线对齐；不得为了多一行去改官方 `titleRow` / `tabs` 的布局——header 高度是桌面窗口 chrome 几何的锚点。下拉菜单顶部有标题行，`不使用仓库` 与仓库列表之间有分隔线。
 15. 设置页只放控件标签、当前值、路径与错误信息。不写教学性说明段（面板介绍、原理、操作步骤、"为什么需要它"）：这类文字写进本文件或 README，界面上的 `intro` / `*Note` 一类键不再新增；旧键删除后不得加回。示例值只能作为输入框 `placeholder`，不能变成段落。
 16. 所有动作按钮必须常显：条件不满足时渲染为 `disabled` 并用 `title`（或同一行的状态文本）说明原因，不得用条件渲染把按钮整个隐藏（弹层、菜单、进度条不在此列，它们不是动作按钮）。设置页现有按钮——档位、规则保存、组件行下载/重新检测、`gh` 登录、设备码复制/打开授权页/取消、网络体检、下载目录迁移/恢复默认——都按这条执行；组件行在状态还没读到时也要渲染（显示「正在读取…」并置灰），不得整行消失。
 17. 下载根目录规则：`toolsPath` 只接受绝对路径，非法或相对值回落默认（写库时归一化为空串）；迁移前先做完整预检（目标已有同名组件即拒绝、任一下载进行中返回 409），四套组件要么都搬、要么都不动；跨卷 `EXDEV` 退化为复制后删除；迁移成功才写 `toolsPath`，失败保留旧值以便重试；迁移后必须把本进程 PATH 里的旧目录（`gh/bin`、`git/cmd`、`ffmpeg/bin`、`python` 与 `python/Scripts`）换成新的。
@@ -65,7 +65,7 @@
 - 修改 `src/push-flow.js` 或 `github_push` 工具后，`test/push-flow.test.js` 必须覆盖目录选择（显式 → 会话，无兜底）、不可用路径早退、密钥拦截与 `force` 放行、失败分类与报告文案；发布只能有 `github_push` 一个入口，不要再往设置页加推送按钮。会话绑定生效时还必须覆盖 `target` 作为远端、不再取仓库快照、以及拒绝推送时仍报告 `target`。
 - 修改 `src/ffmpeg.js` 或 `/compression-tiers/api/ffmpeg` 后，`test/ffmpeg.test.js` 必须覆盖托管源选择、`-version` 解析、PATH 检测与托管优先、状态（missing / partial / installed）与 PATH 前插；真实下载只在临时 home 验证，不写用户 DSH home。
 - 修改 `src/manual-compact.js`（主动压缩队列）后，`test/manual-compact.test.js` 必须覆盖：排队后 `turn/end` 才压缩并注入一次续跑、重复请求被拒、`aborted` 丢弃、**真人消息优先**（结束前发言取消排队任务、压缩中发言只取消续跑）、宿主已按阈值压缩时不重复压缩但仍续跑。真人发言不得被压缩流程吞掉，也不得被续跑消息抢先回答。
-- 修改会话发布仓库（`sessionRepos`、`/api/github/online`、`/api/github/binding`）后，`test/gh.test.js` 覆盖仓库行解析与 `gh` 缺失分类，`test/store.test.js` 覆盖 `owner/name` 归一化与 200 条上限，`test/client.test.js` 覆盖会话头选择器的注册、选项与状态提示。
+- 修改会话发布仓库（`sessionRepos`、`/api/github/online`、`/api/github/binding`）后，`test/gh.test.js` 覆盖仓库行解析与 `gh` 缺失分类，`test/store.test.js` 覆盖 `owner/name` 归一化与 200 条上限，`test/client.test.js` 覆盖会话头选择器的注册、选项与状态提示，以及胶囊位置（`.ct-repo-slot` 不含 `margin-left`、`margin-top: -4px`）和下拉菜单的标题行 + 分隔线顺序。
 - 修改 `src/http.js` 的 `queryParam` 后，`test/http.test.js` 必须覆盖缺参、空值与非字符串请求。
 - 修改 `src/tools-path.js`、`/compression-tiers/api/tools` 或设置页的下载目录区块后，`test/tools-path.test.js` 必须覆盖默认根、绝对路径校验、四套组件整体迁移、目标已存在时预检拒绝、任一下载进行中 409、跨卷 `EXDEV` 回退与「搬一半后重试」；`test/store.test.js` 覆盖 `toolsPath` 归一化，`test/client.test.js` 覆盖迁移与恢复默认按钮的禁用态。
 - 修改 `src/components.js`、`/compression-tiers/api/components` 或某一行组件后，`test/components.test.js` 必须覆盖钉住的 URL 与资源文件名（含 Python 的 `%2B`）、版本解析、PATH 检测、状态（missing / partial / installed / system）、PATH 前插去重与未知组件/无托管构建的早退；`test/component-rows.test.js` 覆盖四行顺序与 state → ready/managed/system/running 映射；`test/client.test.js` 覆盖四行的按钮一致性。

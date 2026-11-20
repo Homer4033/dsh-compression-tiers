@@ -530,12 +530,18 @@ window.__ModuleLoader__.load({
 .ct-component-path {
   word-break: break-all;
 }
+/* The pill lives in the tab strip, right after the tabs: that row is the only
+   chrome below the title that is not clipped (the title cluster itself is
+   overflow:clip with a mask fade), so the capsule reads as session meta instead
+   of being stranded at the far right edge. margin-top lines the 24px pill up
+   with the tab labels: a .tab starts -10px and pads 10px, so its label centre
+   sits 8px below the strip's content top, and 8 - 24/2 = -4. */
 .ct-repo-slot {
   display: flex;
   align-items: center;
+  align-self: flex-start;
   flex: none;
-  margin-left: auto;
-  margin-top: 2px;
+  margin-top: -4px;
 }
 .ct-repo-anchor-wrap {
   display: contents;
@@ -553,24 +559,25 @@ window.__ModuleLoader__.load({
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   box-sizing: border-box;
-  height: 26px;
-  max-width: 260px;
+  height: 24px;
+  max-width: 300px;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 9px 0 8px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
-  line-height: 16px;
+  line-height: 15px;
   white-space: nowrap;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 @media (hover: hover) {
   .ct-repo-pill:hover {
     background: var(--dsw-alias-interactive-bg-hover);
+    border-color: var(--dsw-alias-border-l3);
   }
 }
 .ct-repo-pill:focus-within {
@@ -580,6 +587,7 @@ window.__ModuleLoader__.load({
 .ct-repo-pill[data-bound='true'] {
   border-color: var(--dsw-alias-border-selected);
   background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
 }
 .ct-repo-icon {
   flex: none;
@@ -593,6 +601,7 @@ window.__ModuleLoader__.load({
 .ct-repo-caption {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
 }
 .ct-repo-value {
   min-width: 0;
@@ -600,12 +609,21 @@ window.__ModuleLoader__.load({
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-primary);
+  font-weight: 500;
 }
 .ct-repo-chevron {
   flex: none;
   width: 12px;
   height: 12px;
   color: var(--dsw-alias-label-tertiary);
+  transition: transform 140ms ease;
+}
+.ct-repo-pill[aria-expanded='true'] .ct-repo-chevron {
+  transform: rotate(180deg);
+}
+.ct-repo-pill[aria-expanded='true'] {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 .ct-repo-pill {
   font-family: inherit;
@@ -633,12 +651,23 @@ window.__ModuleLoader__.load({
   font-size: 12px;
   line-height: 16px;
 }
+.ct-repo-menu-head {
+  padding: 2px 8px 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+.ct-repo-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--dsw-alias-border-l3);
+}
 .ct-repo-option {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 30px;
+  min-height: 32px;
   margin: 0;
   padding: 0 8px;
   border: 0;
@@ -660,6 +689,9 @@ window.__ModuleLoader__.load({
 }
 .ct-repo-option-on {
   background: var(--dsw-alias-bg-module-platform);
+}
+.ct-repo-option-on .ct-repo-option-name {
+  font-weight: 500;
 }
 .ct-repo-check {
   flex: none;
@@ -975,6 +1007,24 @@ window.__ModuleLoader__.load({
       }, h('path', { d: 'M4.5 6.25 8 9.75l3.5-3.5' })))
 
       const at = placement.current || { top: 0, left: 0, width: 240 }
+      // Head line + separator keep "no repository" apart from the real list, so
+      // the menu reads as a titled picker rather than a flat run of names.
+      const menuChildren = [h('div', { key: '__head', className: 'ct-repo-menu-head', role: 'presentation' }, t('repoSelectLabel'))]
+      items.forEach(function (item, index) {
+        if (index === 1) menuChildren.push(h('div', { key: '__sep', className: 'ct-repo-sep', role: 'presentation' }))
+        const selected = item.value === bound
+        menuChildren.push(h('button', {
+          key: item.value || '__none',
+          type: 'button',
+          role: 'option',
+          'aria-selected': selected ? 'true' : 'false',
+          className: 'ct-repo-option' + (selected ? ' ct-repo-option-on' : ''),
+          onClick: function () { chooseRepo(item.value) },
+        },
+        h('span', { className: 'ct-repo-check' }, selected ? '✓' : ''),
+        h('span', { className: 'ct-repo-option-name' }, item.label),
+        item.private ? h('span', { className: 'ct-repo-tag' }, t('repoPrivate')) : null))
+      })
       const menu = open && ReactDOM && typeof ReactDOM.createPortal === 'function'
         ? ReactDOM.createPortal(h('div', {
           ref: menuRef,
@@ -982,21 +1032,7 @@ window.__ModuleLoader__.load({
           role: 'listbox',
           'aria-label': t('repoSelectAria'),
           style: { top: at.top + 'px', left: at.left + 'px', width: at.width + 'px' },
-        },
-        items.map(function (item) {
-          const selected = item.value === bound
-          return h('button', {
-            key: item.value || '__none',
-            type: 'button',
-            role: 'option',
-            'aria-selected': selected ? 'true' : 'false',
-            className: 'ct-repo-option' + (selected ? ' ct-repo-option-on' : ''),
-            onClick: function () { chooseRepo(item.value) },
-          },
-          h('span', { className: 'ct-repo-check' }, selected ? '✓' : ''),
-          h('span', { className: 'ct-repo-option-name' }, item.label),
-          item.private ? h('span', { className: 'ct-repo-tag' }, t('repoPrivate')) : null)
-        })), document.body)
+        }, menuChildren), document.body)
         : null
 
       const group = h('span', { className: 'ct-repo-group' },
