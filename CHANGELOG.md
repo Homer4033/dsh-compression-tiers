@@ -1,6 +1,12 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.7`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.8`。
+
+## 1.8.8 — 2026-11-21
+
+- **修 `EPERM: rename 'staged-bin' -> 'bin'`**：包已经下完、二进制也自检通过，最后一步把暂存目录挪进安装位置时被 Windows 拒了——目录里还有文件被占用（杀毒在扫刚写出的 110 MB `ffmpeg.exe`，或者 `-version` 子进程还没退干净）时，`rename` 会报 `EPERM`。新增 `src/swap.js` 的 `moveIntoPlace()`：先按 200ms→400ms→…→6s 退避重试 7 次，锁还在就改用复制（读不锁、改名才锁），安装照样完成。`src/ffmpeg.js`、`src/components.js`（git / python）、`src/gh.js` 里所有到安装目录的移动都改走它，包括回滚路径。
+- **重试不再白下**：下载完成的归档（`<root>/<id>/download/<file>`）现在会被复用——重试时先看它在不在，在就直接解压安装，不重新拉 110+ MB。这条对刚才那种「下完了、装的时候失败」的情况是最直接的救回。
+- 测试 176 条（新增 `test/swap.test.js` 6 条：首试成功、锁重试后成功、锁不释放退化为复制、`ENOENT` 早退、跨卷 `EXDEV` 直接复制、错误分类）。
 
 ## 1.8.7 — 2026-11-21
 

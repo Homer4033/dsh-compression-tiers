@@ -55,6 +55,7 @@
 17. 下载根目录规则：`toolsPath` 只接受绝对路径，非法或相对值回落默认（写库时归一化为空串）；迁移前先做完整预检（目标已有同名组件即拒绝、任一下载进行中返回 409），四套组件要么都搬、要么都不动；跨卷 `EXDEV` 退化为复制后删除；迁移成功才写 `toolsPath`，失败保留旧值以便重试；迁移后必须把本进程 PATH 里的旧目录（`gh/bin`、`git/cmd`、`ffmpeg/bin`、`python` 与 `python/Scripts`）换成新的。
 18. 设置页按钮只有一套标准：所有动作按钮经 `actionButton()` 渲染（基础类 `ct-btn`，主操作 `ct-btn--primary` 只加描边与底色，不改尺寸）；每个动作行经 `actionRow()` 渲染为 `ct-actions`，行内只放按钮、状态文字另起一行；按钮标签走共享键（`downloadIdle` / `downloadKeep` / `downloadContinue` / `downloadRetry` / `downloadRunning` / `downloadDone` / `downloadUnsupported`、`probe`、`stateMissing` / `statePartial` / `stateFailed` / `stateSystem`），禁止再出现 `ghDownload` / `toolsInstall` 这类按面板分裂的副本。四套组件行必须结构一致（名称与版本 → 状态行 → 进度 → 路径/错误 → 同一行两个按钮，下载在左、重新检测在右），都由 `downloadControl()` 算出状态与标签。
 19. git / Python 的托管安装：下载用 `COMPONENTS` 里钉住的 URL 与 HTTP Range 续传；解压与暂存必须在 `<toolsPath>/.staging/<id>`（**不能**放在组件目录内，否则整棵树 rename 到 `<root>/<id>` 会踩父目录），先对暂存二进制跑一次 `--version`，通过后整棵树原子替换、失败回滚旧版本；只把 `git/cmd`、`python`、`python/Scripts` 插到本进程 PATH 最前，不写系统环境变量。托管源只有 Windows，其它平台只做 PATH 检测并报「当前系统不可用」。
+20. 安装替换必须经 `src/swap.js` 的 `moveIntoPlace()`，不得直接 `renameSync` 到安装目录：Windows 在目录里有文件被占用（杀毒扫描刚写出的二进制、`-version` 子进程还没退干净）时把 rename 报成 `EPERM`，必须「重试退避 → 仍失败就复制过去」，否则用户看到的就是一次白下的安装失败。下载完成的归档文件（`<root>/<id>/download/<file>`）要复用，重试时先判断它是否已存在，存在就不再下载。
 
 ## 验证要求
 
@@ -68,7 +69,8 @@
 - 修改会话发布仓库（`sessionRepos`、`/api/github/online`、`/api/github/binding`）后，`test/gh.test.js` 覆盖仓库行解析与 `gh` 缺失分类，`test/store.test.js` 覆盖 `owner/name` 归一化与 200 条上限，`test/client.test.js` 覆盖会话头选择器的注册、选项与状态提示，以及胶囊位置（`.ct-repo-slot` 不含 `margin-left`、`margin-top: -4px`）和下拉菜单的标题行 + 分隔线顺序。
 - 修改 `src/http.js` 的 `queryParam` 后，`test/http.test.js` 必须覆盖缺参、空值与非字符串请求。
 - 修改 `src/tools-path.js`、`/compression-tiers/api/tools` 或设置页的下载目录区块后，`test/tools-path.test.js` 必须覆盖默认根、绝对路径校验、四套组件整体迁移、目标已存在时预检拒绝、任一下载进行中 409、跨卷 `EXDEV` 回退与「搬一半后重试」；`test/store.test.js` 覆盖 `toolsPath` 归一化，`test/client.test.js` 覆盖迁移与恢复默认按钮的禁用态。
-- 修改 `src/components.js`、`/compression-tiers/api/components` 或某一行组件后，`test/components.test.js` 必须覆盖钉住的 URL 与资源文件名（含 Python 的 `%2B`）、版本解析、PATH 检测、状态（missing / partial / installed / system）、PATH 前插去重与未知组件/无托管构建的早退；`test/component-rows.test.js` 覆盖四行顺序与 state → ready/managed/system/running 映射；`test/client.test.js` 覆盖四行的按钮一致性。
+- 修改 `src/swap.js`（安装树替换）后，`test/swap.test.js` 必须覆盖首试成功、锁重试后成功、锁不释放退化为复制、不可重试错误（`ENOENT`）早退、跨卷 `EXDEV` 直接复制；`src/gh.js` / `src/ffmpeg.js` / `src/components.js` 里到安装目录的移动必须走 `moveIntoPlace`，不得留裸 `renameSync`。
+- 修改 src/components.js、/compression-tiers/api/components 或某一行组件后，`test/components.test.js` 必须覆盖钉住的 URL 与资源文件名（含 Python 的 `%2B`）、版本解析、PATH 检测、状态（missing / partial / installed / system）、PATH 前插去重与未知组件/无托管构建的早退；`test/component-rows.test.js` 覆盖四行顺序与 state → ready/managed/system/running 映射；`test/client.test.js` 覆盖四行的按钮一致性。
 - 修改设置页文案或按钮后，`test/client.test.js` 必须覆盖：动作按钮常显（含设备码复制 / 打开授权页 / 取消在空闲时仍渲染且 `disabled`、组件行在状态未到时仍渲染）、说明段键已删除（`intro`、`ghToolNote` 等不得回到字典里）、空状态行收起（`.ct-status:empty` / `.ct-note:empty` 不占位、面板底部不留白），以及四套组件行的按钮一致性（同样的类名、同样的标签键、同样的禁用态、同样的一行顺序）；按面板分裂的标签键（`ghDownload`、`toolsInstall` 等）与已合并的旧面板键（`toolsTitle`、`toolsPathTitle`、`ghTitle`、`ghPathLabel`）都不得回归。
 - 发布前运行 `npm run check:secrets`；新增运行时文件、改 `package.json` 的 `files` 或版本号后同步 `CHANGELOG.md` 并按版本打 tag（`vX.Y.Z`）。
 - 修改 manifest、locale、图标或 `client.js` 注册方式后，检查 `test/manifest.test.js` 全绿。

@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises'
 import { basename, dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { proxyEnv } from './publish.js'
+import { moveIntoPlace } from './swap.js'
 
 /**
  * GitHub CLI (`gh`) management, merged in from `homerdsh-workbench`. The
@@ -419,9 +420,9 @@ async function installBinary(temp, final, platform) {
     }
     if (existsSync(final)) {
       backup = `${final}.old-${process.pid}-${Date.now()}`
-      renameSync(final, backup)
+      await moveIntoPlace(final, backup)
     }
-    renameSync(temp, final)
+    await moveIntoPlace(temp, final)
     installed = true
     const check = await runCommand(final, ['--version'], { timeoutMs: VERIFY_TIMEOUT_MS })
     if (check.code !== 0) {
@@ -442,7 +443,7 @@ async function installBinary(temp, final, platform) {
       // Keep restoring the older copy even if the new file is locked.
     }
     try {
-      if (backup && existsSync(backup)) renameSync(backup, final)
+      if (backup && existsSync(backup)) await moveIntoPlace(backup, final)
     } catch {
       // Best effort; the caller still reports the install error.
     }
@@ -475,18 +476,23 @@ export function startGhDownload(root, { platform = process.platform, arch = proc
     controller.abort(new Error('download timed out after 10 minutes'))
   }, DOWNLOAD_TIMEOUT_MS)
   if (typeof timer.unref === 'function') timer.unref()
-  downloadWithResume({
-    url: asset.url,
-    partPath: target,
-    signal: controller.signal,
-    onProgress: (progress) => {
-      job.received = progress.received
-      job.total = progress.total
-    },
-  }).then(async () => {
+  // A renamed archive only exists once a download finished, so retrying after a
+  // failed install (locked binary, probe failure) reuses it instead of pulling
+  // the whole release again.
+  const archivePath = join(downloadDir(root), asset.file)
+  const ready = existsSync(archivePath)
+    ? Promise.resolve()
+    : downloadWithResume({
+      url: asset.url,
+      partPath: target,
+      signal: controller.signal,
+      onProgress: (progress) => {
+        job.received = progress.received
+        job.total = progress.total
+      },
+    }).then(() => moveIntoPlace(target, archivePath))
+  ready.then(async () => {
     clearTimeout(timer)
-    const archivePath = join(downloadDir(root), asset.file)
-    renameSync(target, archivePath)
     const staging = join(ghRoot(root), 'src')
     await extractArchive(archivePath, staging, asset.kind, platform)
     const binaryName = ghBinaryName(platform)

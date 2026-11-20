@@ -2,6 +2,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSy
 
 import { join } from 'node:path'
 import { downloadWithResume, extractArchive, runCommand } from './gh.js'
+import { moveIntoPlace } from './swap.js'
 
 /**
  * Managed components beyond `gh` and ffmpeg: git and Python.
@@ -259,14 +260,16 @@ function prune(root, id) {
  * Move the staged tree into place and probe the installed binary. The previous
  * install is kept until the probe passes, then dropped; on failure it is
  * restored, so an install either fully replaces the component or changes
- * nothing.
+ * nothing. Both renames go through `moveIntoPlace`: Windows reports a tree that
+ * is still being scanned (or whose probe process has not fully exited) as
+ * `EPERM`, so the swap retries and finally copies instead of failing.
  */
 async function swapTree(finalDir, stagedDir, spec, platform, run) {
   const backup = `${finalDir}.old-${process.pid}-${Date.now()}`
   let moved = false
   try {
-    if (existsSync(finalDir)) renameSync(finalDir, backup)
-    renameSync(stagedDir, finalDir)
+    if (existsSync(finalDir)) await moveIntoPlace(finalDir, backup)
+    await moveIntoPlace(stagedDir, finalDir)
     moved = true
     const binary = join(finalDir, spec.binary)
     const check = await run(binary, spec.args, { timeoutMs: VERIFY_TIMEOUT_MS })
@@ -289,7 +292,7 @@ async function swapTree(finalDir, stagedDir, spec, platform, run) {
       // Keep restoring the old tree even if the new one is locked.
     }
     try {
-      if (existsSync(backup)) renameSync(backup, finalDir)
+      if (existsSync(backup)) await moveIntoPlace(backup, finalDir)
     } catch {
       // Best effort; the caller still reports the install error.
     }
@@ -323,17 +326,21 @@ export async function startComponentDownload(root, id, { platform = process.plat
   void (async () => {
     const downloadDir = join(dir, 'download')
     mkdirSync(downloadDir, { recursive: true })
-    await downloadWithResume({
-      url: asset.url,
-      partPath: part,
-      signal: controller.signal,
-      onProgress: (progress) => {
-        job.received = progress.received
-        job.total = progress.total
-      },
-    })
     const archive = join(downloadDir, asset.file)
-    renameSync(part, archive)
+    // A finished download is what puts the archive there, so a retry after a
+    // failed install reuses it instead of downloading the release again.
+    if (!existsSync(archive)) {
+      await downloadWithResume({
+        url: asset.url,
+        partPath: part,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          job.received = progress.received
+          job.total = progress.total
+        },
+      })
+      await moveIntoPlace(part, archive)
+    }
     const staging = stagingRoot(root, id)
     rmSync(staging, { recursive: true, force: true })
     const unpacked = join(staging, 'unpacked')
@@ -360,7 +367,7 @@ export async function startComponentDownload(root, id, { platform = process.plat
       cpSync(tree, staged, { recursive: true })
       rmSync(unpacked, { recursive: true, force: true })
     } else {
-      renameSync(unpacked, staged)
+      await moveIntoPlace(unpacked, staged)
     }
     await swapTree(dir, staged, spec, platform, run)
     prune(root, id)

@@ -1,6 +1,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { downloadWithResume, extractArchive, findBinary, runCommand } from './gh.js'
+import { moveIntoPlace } from './swap.js'
 
 /**
  * Managed ffmpeg + ffprobe, next to the managed `gh`.
@@ -167,15 +168,17 @@ function prune(root) {
 
 /**
  * Move the staged `bin` directory into place. The previous directory is kept
- * until the new binaries answer `-version`, then removed.
+ * until the new binaries answer `-version`, then removed. Renames go through
+ * `moveIntoPlace` so a lingering lock (antivirus scanning the freshly probed
+ * binaries) retries and, if needed, copies instead of failing the install.
  */
 async function swapBinDir(root, stagedBin, platform) {
   const binDir = ffmpegBinDir(root)
   const backup = `${binDir}.old-${process.pid}-${Date.now()}`
   let moved = false
   try {
-    if (existsSync(binDir)) renameSync(binDir, backup)
-    renameSync(stagedBin, binDir)
+    if (existsSync(binDir)) await moveIntoPlace(binDir, backup)
+    await moveIntoPlace(stagedBin, binDir)
     moved = true
     const names = ffmpegSource(platform).binaries
     for (const name of Object.values(names)) {
@@ -192,7 +195,7 @@ async function swapBinDir(root, stagedBin, platform) {
       // Keep restoring the old directory even if the new one is locked.
     }
     try {
-      if (existsSync(backup)) renameSync(backup, binDir)
+      if (existsSync(backup)) await moveIntoPlace(backup, binDir)
     } catch {
       // Best effort; the caller still reports the install error.
     }
@@ -230,17 +233,22 @@ export function startFfmpegDownload(root, { platform = process.platform, arch = 
 
   void (async () => {
     mkdirSync(downloadDir, { recursive: true })
-    await downloadWithResume({
-      url: source.url,
-      partPath: part,
-      signal: controller.signal,
-      onProgress: (progress) => {
-        job.received = progress.received
-        job.total = progress.total
-      },
-    })
     const archive = join(downloadDir, source.file)
-    renameSync(part, archive)
+    // The archive only carries this name after a finished download, so a retry
+    // after a failed install (locked bin, probe failure) reuses it instead of
+    // pulling 110+ MB again.
+    if (!existsSync(archive)) {
+      await downloadWithResume({
+        url: source.url,
+        partPath: part,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          job.received = progress.received
+          job.total = progress.total
+        },
+      })
+      await moveIntoPlace(part, archive)
+    }
     const staging = join(ffmpegRoot(root), 'src')
     await extractArchive(archive, staging, source.kind, platform)
     const stagedBin = join(ffmpegRoot(root), 'staged-bin')
