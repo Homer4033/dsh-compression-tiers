@@ -13,9 +13,19 @@ import { detectProxy, pushRepo, repoSnapshot, scanSecrets } from './publish.js'
  * refused when an agent tries to publish it.
  */
 
+/**
+ * The push target an online-repository binding implies: the `sessionRepos` map
+ * lives on the plugin settings themselves (not under `github`), so this reads
+ * the top-level object and tolerates a missing map.
+ */
+export function sessionTarget(settings, sessionId) {
+  const repos = settings && settings.sessionRepos ? settings.sessionRepos : null
+  const name = repos && sessionId ? repos[sessionId] : ''
+  return name ? `https://github.com/${name}.git` : ''
+}
+
 /** A path that could be a checkout: absolute and an existing directory. */
-export function isRepoDir(path) {
-  if (typeof path !== 'string' || !path.trim()) return false
+export function isRepoDir(path) {  if (typeof path !== 'string' || !path.trim()) return false
   const value = path.trim()
   if (!isAbsolute(value)) return false
   try {

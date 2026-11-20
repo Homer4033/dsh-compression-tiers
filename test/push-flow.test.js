@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { hasGitEntry, isRepoDir, pushFlow, pushReportText, resolvePushCwd } from '../src/push-flow.js'
+import { hasGitEntry, isRepoDir, pushFlow, pushReportText, resolvePushCwd, sessionTarget } from '../src/push-flow.js'
 
 function tempDir() {
   return mkdtempSync(join(tmpdir(), 'compression-tiers-push-'))
@@ -218,4 +218,17 @@ test('a bound target is reported even when the push is refused', async () => {
   assert.equal(refused.failure, 'no-repository')
   assert.equal(refused.target, target)
   assert.equal(fake.calls.detect.length, 0)
+})
+
+test('the session binding is read from the top-level settings, not from github', () => {
+  // The regression: `githubSettings()` returns only the `github` block, so
+  // indexing it with a session id threw "Cannot read properties of undefined".
+  const settings = { github: { remote: 'origin' }, sessionRepos: { 'session-a': 'Homer4033/toolbox' } }
+  assert.equal(sessionTarget(settings, 'session-a'), 'https://github.com/Homer4033/toolbox.git')
+  assert.equal(sessionTarget(settings, 'session-b'), '')
+  assert.equal(sessionTarget(settings, ''), '')
+  // A settings file written before sessionRepos existed must not throw.
+  assert.equal(sessionTarget({ github: {} }, 'session-a'), '')
+  assert.equal(sessionTarget(null, 'session-a'), '')
+  assert.equal(sessionTarget(undefined, undefined), '')
 })

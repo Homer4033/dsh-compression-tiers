@@ -1,6 +1,12 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.4`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.5`。
+
+## 1.8.5 — 2026-11-20
+
+- **修复 `github_push` 崩溃**：工具读会话绑定时用的是 `settings.github`（只有 github 块），而 `sessionRepos` 在**顶层** settings 上，于是报 `Cannot read properties of undefined (reading 'session-…')`，工具完全不可用。新增 `src/push-flow.js` 的 `sessionTarget()`（读顶层、缺 map 时返回空串），工具与绑定查询共用；`test/push-flow.test.js` 补回归用例（含旧 settings 没有 `sessionRepos` 的情况）。
+- **README 精简**：从 280 行压到 88 行，按「安装 / 使用 / 五档参数 / 智能体工具 / 组件管理 / 全局规则 / 兼容性与限制 / 开发」重排，删掉长论证与重复细节，保留可查的表（档位、四套组件）。
+- 测试 164 条。
 
 ## 1.8.4 — 2026-11-20
 

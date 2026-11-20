@@ -12,7 +12,7 @@ import { ffmpegDownloadRunning, ffmpegStatus, prependFfmpegPath, startFfmpegDown
 import { COMPONENT_IDS, componentBinDirs, componentDownloadRunning, componentStatus, prependComponentPath, startComponentDownload } from './src/components.js'
 import { COMPONENT_ORDER, componentRows } from './src/component-rows.js'
 import { migrateTools, parseToolsPath, resolveToolsPath, toolsStatus } from './src/tools-path.js'
-import { pushFlow, pushReportText, resolvePushCwd } from './src/push-flow.js'
+import { pushFlow, pushReportText, resolvePushCwd, sessionTarget } from './src/push-flow.js'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formatRouteLines, parseRouteLines } from './src/routes.js'
@@ -114,7 +114,8 @@ function sessionIdOf(exec) {
 /** The repository this session publishes to, or null. */
 function sessionRepoBinding(sessionId, settings = readSettings(homeDir()).settings) {
   if (!sessionId) return null
-  return settings.sessionRepos[sessionId] || null
+  const repos = settings && settings.sessionRepos ? settings.sessionRepos : {}
+  return repos[sessionId] || null
 }
 
 function trace(stage, detail) {  // Keep the console quiet: only failures, skipped work and adoption matter.
@@ -456,10 +457,13 @@ export function apply(ctx) {
     },
     output: toolOutput(),
     async execute(args, exec) {
-      const settings = githubSettings()
+      // `sessionRepos` lives on the plugin settings; `githubSettings()` only
+      // returns the `github` block, so indexing it for a session id throws.
+      const stored = readSettings(homeDir()).settings
+      const settings = stored.github
       const sessionId = sessionIdOf(exec)
-      const bound = sessionId ? settings.sessionRepos[sessionId] || null : null
-      const target = bound ? `https://github.com/${bound}.git` : ''
+      const bound = sessionId ? sessionRepoBinding(sessionId, stored) : null
+      const target = sessionTarget(stored, sessionId)
       const explicit = typeof args.repo === 'string' ? args.repo.trim() : ''
       const resolved = resolvePushCwd({ explicit, sessionDirectory: sessionDirectory(ctx, exec) })
       if (!resolved.cwd) {

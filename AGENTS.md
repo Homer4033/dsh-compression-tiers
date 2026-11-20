@@ -110,3 +110,4 @@
 - 2026-11-21：组件行的多二进制不再重复报缺失：找到的二进制各占一行（来源/版本/路径），所有缺的合并成一行「ffmpeg / ffprobe　未找到」，不再在「未安装」下面再逐条写「未找到」。测试增至 157 条；版本 1.8.2。
 - 2026-11-21：多二进制行的标题写成它覆盖的二进制（`ffmpeg / ffprobe`），两个都没装时只留「未安装」一行、不再补「未找到」——两者同义；只缺一个时保留该行（此时状态行是「未完成，可续传」，不同义）。版本 1.8.3。
 - 2026-11-21：主动压缩让位于真人输入：`src/manual-compact.js` 的 `user/message` 分支不再只在「压缩正在跑」时记录，任何真人消息都会取消排队中的压缩并阻止续跑消息（已开始的压缩不中断，但结束后不注入续跑）；新增 `test/manual-compact.test.js`（7 条）并把该模块纳入验证要求。测试增至 164 条；版本 1.8.4。
+- 2026-11-21：修复 `github_push` 必然崩溃：工具把 `githubSettings()`（只有 `github` 块）当成顶层 settings 去取 `sessionRepos[sessionId]`，任何会话都报 `Cannot read properties of undefined (reading 'session-…')`。新增 `src/push-flow.js` 的 `sessionTarget(settings, sessionId)` 作为绑定 → 目标的唯一换算（读顶层、缺 map 返回空串），工具与 `sessionRepoBinding` 共用，`test/push-flow.test.js` 补回归用例（含无 `sessionRepos` 的旧设置）。README 精简到 88 行。版本 1.8.5。
