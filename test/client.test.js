@@ -311,6 +311,9 @@ test('the client factory registers a localized settings section', () => {
   assert.match(styles[0].textContent, /\.ct-repo-pill \{/)
   assert.match(styles[0].textContent, /\.ct-page \{/)
   assert.match(styles[0].textContent, /\.ct-component \{/)
+  // Empty status/note lines must collapse instead of leaving a gap in the panel.
+  assert.match(styles[0].textContent, /\.ct-status:empty,\s*\.ct-note:empty \{/)
+  assert.match(styles[0].textContent, /display: none;/)
   assert.equal(dictionaries.namespace, 'compressionTiers')
   assert.deepEqual(Object.keys(dictionaries.dicts).sort(), ['en', 'zh'])
   for (const locale of ['zh', 'en']) {
@@ -428,6 +431,24 @@ test('the component panel renders one row per managed component', () => {
     assert.equal(textOf(download), 'downloadDone')
     assert.ok(buttonOf(nodes, `probe:${id}`), `probe:${id} is rendered`)
   }
+})
+
+test('a missing ffprobe stays listed under the ffmpeg row', () => {
+  const rows = [
+    componentRow('ffmpeg', 'partial', {
+      path: 'C:/dsh/compression-tiers/ffmpeg/bin/ffmpeg.exe',
+      toolVersion: '7.1.1',
+      tools: [
+        { name: 'ffmpeg', path: 'C:/dsh/compression-tiers/ffmpeg/bin/ffmpeg.exe', version: '7.1.1', managed: true },
+        { name: 'ffprobe', path: null, version: null, managed: false },
+      ],
+    }),
+  ]
+  const nodes = renderPage({ components: componentsPayload(rows) })
+  const toolRows = nodes.filter((node) => String(node.props.className || '') === 'ct-tool')
+  assert.equal(toolRows.length, 2, 'both binaries are listed')
+  assert.match(deepText(toolRows[0]), /toolsManaged v7\.1\.1/)
+  assert.match(deepText(toolRows[1]), /toolsNotFound/)
 })
 
 test('every component row obeys one button standard', () => {

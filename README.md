@@ -152,7 +152,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 | ffmpeg / ffprobe | gyan.dev `ffmpeg-release-essentials.zip`（浮动 release） | `<root>/ffmpeg` | `<root>/ffmpeg/bin` |
 | Python | python-build-standalone，钉 `3.11.18+20261110`（`...-x86_64-pc-windows-msvc-install_only.tar.gz`） | `<root>/python` | `<root>/python`、`<root>/python/Scripts` |
 
-- **检测**：先看托管副本，再看系统 PATH；两处都有时优先托管副本。面板标出来源（`托管版` / `系统 PATH`）与版本，PATH 里只有系统副本时按钮显示「仍要下载」。
+- **检测**：先看托管副本，再看系统 PATH；两处都有时优先托管副本。面板标出来源（`托管版` / `系统 PATH`）与版本，PATH 里只有系统副本时按钮显示「重新下载」。ffmpeg 一行固定列出 `ffmpeg` 与 `ffprobe` 两个二进制，缺哪个都会显示「未找到」。
 - **下载**：HTTP Range 断点续传、20 分钟超时；解压到 `<root>/.staging/<id>` 后先跑一次 `--version`（git 与 Python）或 `-version`（ffmpeg/ffprobe）自检，通过才原子换上整棵目录，失败回滚旧版本并保留 `.part`。暂存目录不放组件目录里，否则「把暂存树 rename 成组件目录」会踩到自己的父目录。
 - **PATH**：只在本进程 PATH 最前插入托管目录，不写系统环境变量；插件激活时、安装成功后、迁移之后各插一次，重复插入会被去重。
 - **接口**：`GET /compression-tiers/api/components` 读四行状态与下载根目录，`POST` `{"id":"git","action":"download"}` 启动后台下载并返回 202 + 刷新后的列表，未知 id 返回 400。`GET /compression-tiers/api/ffmpeg` 与 `/api/github` 仍保留（前者是单组件历史接口，后者带登录状态）。
@@ -226,7 +226,7 @@ npm 现在只接受「暂存 + 人工 2FA 审批」的发布方式，见 [发布
 - **全局规则没有智能体工具**：档位可以用 `compression_tiers` 改，规则只能由人在设置页保存，避免智能体自行改写高优先级契约。写入的内容会被官方加载器注入后续每个会话，只保存你自己信任的规则，不要写密钥或一次性笔记。
 - **规则大小**：单次保存上限 100,000 字符，超出直接 413；系统提示里的摘要固定 2,000 字符，超出部分仍由官方加载器在会话开始时读取。
 - **GitHub CLI 需要网络**：托管版从 github.com 下载，企业代理或内网可能失败；失败会保留 `.part` 文件，重试时续传。下载只校验大小和 `gh --version`，不固定压缩包 SHA-256。
-- **系统已有 gh**：面板显示「系统已安装（PATH）」，可以直接登录；点「仍要下载」会安装托管版并优先使用。
+- **系统已有 gh**：面板显示「系统已安装（PATH）」，可以直接登录；点「重新下载」会安装托管版并优先使用。
 - **ffmpeg 只从 gyan.dev 下载**：需要能访问 `www.gyan.dev`，企业代理或内网可能失败；失败保留 `.part`，重试续传。托管源只有 Windows，Linux / macOS 用 PATH 里的版本；下载的是当前 release 构建，钉住的只有 URL 与安装后的 `-version` 自检。
 - **git 与 Python 的托管源只在 Windows 上**（MinGit 与 python-build-standalone 的 Windows 构建），其它平台那一行显示「当前系统不可用」，只做 PATH 检测。安装后 `<root>/git/cmd`、`<root>/python`、`<root>/python/Scripts` 会插到本进程 PATH 最前，所以该进程里后续起的 `git` / `python` 用的是托管副本。
 - **托管副本会盖过系统版本**：装了托管 git 或 Python 后，本进程内的 `git` / `python` 优先用托管副本（这正是安装的目的）；要回到系统版本，把 `<root>/git`、`<root>/python` 删掉并重启 DSH。

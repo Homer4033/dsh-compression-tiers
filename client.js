@@ -82,7 +82,7 @@ window.__ModuleLoader__.load({
         ghAuthTitle: 'GitHub 登录',
         probe: '重新检测',
         downloadIdle: '下载',
-        downloadKeep: '仍要下载',
+        downloadKeep: '重新下载',
         downloadContinue: '继续下载',
         downloadRetry: '重试',
         downloadRunning: '下载中 ',
@@ -183,7 +183,7 @@ window.__ModuleLoader__.load({
         ghAuthTitle: 'GitHub sign-in',
         probe: 'Re-check',
         downloadIdle: 'Download',
-        downloadKeep: 'Download anyway',
+        downloadKeep: 'Download again',
         downloadContinue: 'Resume download',
         downloadRetry: 'Retry',
         downloadRunning: 'Downloading ',
@@ -337,6 +337,12 @@ window.__ModuleLoader__.load({
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
+}
+/* An empty status or note line is dead space at the bottom of a panel: hide it
+   while there is nothing to say, and let it appear together with the message. */
+.ct-status:empty,
+.ct-note:empty {
+  display: none;
 }
 .ct-meta {
   display: grid;
@@ -1489,7 +1495,9 @@ window.__ModuleLoader__.load({
             ? h('div', { className: 'ct-tools-list' }, row.tools.map(function (tool) {
               return h('div', { className: 'ct-tool', key: tool.name },
                 h('span', { className: 'ct-tool-name' }, tool.name),
-                h('span', { className: 'ct-note' }, (tool.managed ? t('toolsManaged') : t('toolsSystem')) + (tool.version ? ' v' + tool.version : '')),
+                h('span', { className: 'ct-note' }, (tool.path
+                  ? (tool.managed ? t('toolsManaged') : t('toolsSystem'))
+                  : t('toolsNotFound')) + (tool.version ? ' v' + tool.version : '')),
                 tool.path ? h('span', { className: 'ct-tool-path' }, tool.path) : null)
             }))
             : null,

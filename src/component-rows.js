@@ -61,11 +61,18 @@ export function ghComponentRow(status) {
 
 /** `ffmpegStatus` → row, keeping ffmpeg and ffprobe as its two binaries. */
 export function ffmpegComponentRow(root, status) {
-  const tools = ['ffmpeg', 'ffprobe']
-    .map((name) => (status[name]
-      ? { name, path: status[name].path, version: status[name].version || null, managed: status[name].managed === true }
-      : null))
-    .filter(Boolean)
+  // Both binaries are always listed, found or not: the pair is what the row is
+  // about, and "ffprobe is missing" has to stay visible.
+  const tools = ['ffmpeg', 'ffprobe'].map((name) => {
+    const info = status[name] || null
+    return {
+      name,
+      path: info && info.path ? info.path : null,
+      version: info && info.version ? info.version : null,
+      managed: Boolean(info && info.managed === true),
+    }
+  })
+  const found = tools.filter((tool) => tool.path)
   const download = status.download || {}
   // `ffmpegStatus` reports `installed` / `partial` / `missing` only, so a job in
   // flight or a failed one has to win over the binary state here.
@@ -79,8 +86,8 @@ export function ffmpegComponentRow(root, status) {
     // The managed copies are what make this a managed install; a PATH copy is
     // reported as `system` so the page offers the same forced download.
     managed: tools.some((tool) => tool.managed),
-    system: tools.length > 0 && tools.every((tool) => tool.managed !== true),
-    path: tools[0] ? tools[0].path : null,
+    system: found.length > 0 && tools.every((tool) => tool.managed !== true),
+    path: found[0] ? found[0].path : null,
     percent: download.percent,
     error: download.error,
     installDir: ffmpegRoot(root),

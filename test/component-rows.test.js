@@ -175,7 +175,32 @@ test('ffmpeg keeps both binaries and the state of the pair', () => {
   assert.equal(running.percent, 50)
   assert.equal(running.error, 'stalled')
   assert.equal(running.path, null)
-  assert.equal(running.tools, null)
+  // A missing binary still gets a row: the pair stays visible, marked missing.
+  assert.deepEqual(running.tools.map((tool) => [tool.name, tool.path, tool.managed]), [
+    ['ffmpeg', null, false],
+    ['ffprobe', null, false],
+  ])
+  assert.equal(running.managed, false)
+  assert.equal(running.system, false)
+})
+
+test('one missing binary does not hide the other from the row', () => {
+  const row = ffmpegComponentRow(ROOT, ffmpegStatus({
+    state: 'partial',
+    version: null,
+    ffmpeg: { path: join(ROOT, 'ffmpeg', 'bin', 'ffmpeg.exe'), managed: true, version: '7.1.1' },
+    ffprobe: null,
+  }))
+  assert.equal(row.state, 'partial')
+  assert.equal(row.ready, false)
+  assert.equal(row.path, join(ROOT, 'ffmpeg', 'bin', 'ffmpeg.exe'))
+  assert.deepEqual(row.tools.map((tool) => [tool.name, Boolean(tool.path)]), [
+    ['ffmpeg', true],
+    ['ffprobe', false],
+  ])
+  // Only a full pair counts as a managed / system install.
+  assert.equal(row.managed, true, 'the managed copy is reported')
+  assert.equal(row.system, false)
 })
 
 test('an unsupported platform is reported as unsupported, not missing', () => {

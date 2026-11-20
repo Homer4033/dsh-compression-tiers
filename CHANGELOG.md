@@ -1,6 +1,13 @@
 # 变更记录
 
-> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.0`。
+> 版本号以 `package.json` 为准，每个发布版本对应一个 `vX.Y.Z` tag。安装方可以锁 `git+https://github.com/Homer4033/dsh-harness-toolbox.git#v1.8.1`。
+
+## 1.8.1 — 2026-11-20
+
+- **ffprobe 不再消失**：ffmpeg 那一行固定列出 `ffmpeg` 与 `ffprobe` 两个二进制，缺哪个就显示「未找到」，不再因为整对都没装就把副行整个省掉。
+- **「仍要下载」改为「重新下载」**（`downloadKeep`）：PATH 里已有系统副本时，按钮文案说明的是「再装一份托管版」，不是「坚持要装」；英文同步改为 `Download again`。
+- **面板底部不再留空**：状态行是空的（`ct-status` / `ct-note` 无内容）时直接收起，档位面板与规则面板底部原来会多出约 30px 的空白（网格 `gap` + 预留的 18px 行高），现在没有消息就不占位。
+- 测试：`test/component-rows.test.js` 覆盖「缺一个二进制仍列两行」与「未找到」；`test/client.test.js` 覆盖 `toolsNotFound` 副行与空状态收起的样式规则；共 156 条。
 
 ## 1.8.0 — 2026-11-21
 
